@@ -1,0 +1,33 @@
+# FML Memory System Rules
+
+You have access to the FML (Firebolt Memory Layer) MCP server for persistent memory management.
+
+## Session Management
+- At the start of each conversation, call `init_session` with user_id="jon" to initialize or resume a memory session
+- Use the returned session_id for all subsequent memory operations
+
+## Automatic Conversation Logging
+After EVERY user message, call `add_to_working_memory` with:
+- content_type="message"
+- A summary of the user's query and your response (keep it concise but capture key details)
+
+## When to Store to Long-Term Memory
+Call `store_memory` when the user:
+- Makes decisions about architecture, tools, or approaches
+- Shares preferences about coding style, frameworks, or workflows
+- Provides important context about their project or environment
+- Asks you to remember something
+- Completes a significant task or milestone
+
+## When to Recall Memories
+Call `recall_memories` or `get_relevant_context` when:
+- Starting work on a task (to get relevant background)
+- The user asks "what did we decide about X?"
+- You need context about the project, user preferences, or past decisions
+- The user references something from a previous conversation
+
+## Best Practices
+- Use `get_relevant_context` for complex queries - it automatically combines working + long-term memory
+- Pin important working memory items that shouldn't be evicted
+- Use entity tags (e.g., "table:users", "file:api.py") for better recall
+- Call `checkpoint_working_memory` at natural conversation boundaries or when the session gets long

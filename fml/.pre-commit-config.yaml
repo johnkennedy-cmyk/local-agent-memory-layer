@@ -1,0 +1,39 @@
+# Pre-commit hooks for security and code quality
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Detect secrets and credentials
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*\.env\.example$|
+            .*SECURITY.*\.md$|
+            .*\.git/.*
+          )$
+
+  # Prevent committing .env files
+  - repo: local
+    hooks:
+      - id: check-env-files
+        name: Check for .env files
+        entry: .git/hooks/check-env-files.sh
+        language: system
+        pass_filenames: false
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key

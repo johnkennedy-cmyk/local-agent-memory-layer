@@ -1,0 +1,108 @@
+---
+description: FML Memory Layer - MANDATORY for all sessions
+globs:
+alwaysApply: true
+---
+
+# FML (Firebolt Memory Layer) - ALWAYS USE
+
+You MUST use FML for persistent memory in EVERY conversation. This is not optional.
+
+## MANDATORY: Session Initialization (FIRST THING TO DO)
+
+At the START of every conversation, BEFORE responding to any user request:
+
+```
+1. Call init_session with user_id "YOUR_USERNAME"
+2. Call recall_memories with the user's query to get relevant context
+3. Use the retrieved context to inform your response
+```
+
+## During Every Conversation
+
+### Add to Working Memory
+- After understanding the user's intent, add task context with `add_to_working_memory`
+- Use content_type: "task_state" for current tasks
+- Use content_type: "message" for important user statements
+- Use content_type: "scratchpad" for your observations
+
+### Store Important Learnings (IMMEDIATE - call `store_memory`)
+Store these IMMEDIATELY when encountered - don't wait:
+- User preferences (coding style, tool preferences, environment setup)
+- Project decisions and architecture choices
+- Solutions that worked for specific problems
+- Configuration values, connection strings (NOT credentials)
+- Error fixes and workarounds discovered
+- User says "remember this" or "save this" or similar
+
+### Automatic Triggers for `store_memory`:
+| User Says | Action |
+|-----------|--------|
+| "Remember this/that" | Store immediately with high importance |
+| "Save this for later" | Store with importance 0.9 |
+| "This is important" | Store with importance 0.95 |
+| "Don't forget" | Store with importance 0.9 |
+| Any solution after debugging | Store as procedural/workflow |
+
+### End of Conversation Checkpoint
+When conversation is winding down or user says goodbye:
+- Call `checkpoint_working_memory(session_id, user_id)` to auto-promote important working memory items to long-term storage
+- This analyzes relevance and importance automatically
+
+### Get Context Before Complex Tasks
+Before starting multi-step tasks, call `get_relevant_context` to assemble:
+- Working memory (current session)
+- Long-term memories (past learnings)
+- Related project context
+
+## Memory Categories
+
+| Category | Use For |
+|----------|---------|
+| `episodic` | Events, decisions, what happened |
+| `semantic` | Facts, entities, project knowledge |
+| `procedural` | How-to, workflows, patterns |
+| `preference` | User preferences, styles |
+
+## CRITICAL: Security Rules (NEVER VIOLATE)
+
+### Never Store in FML:
+- Actual passwords, API keys, secrets, or tokens
+- Values matching: sk-*, ghp_*, AKIA*, bearer tokens
+- Anything from .env files
+- Firebolt credentials, OpenAI keys, AWS secrets
+
+### Always Enforce:
+1. Before ANY git push, remind about credential scanning
+2. Never echo back credential values
+3. For new projects, include git-secrets and pre-commit setup
+4. Check recall_memories for security rules on any repo work
+
+### If Asked for Credentials:
+Say: "Credentials are stored securely in .env files and should not be shared via chat. Check your local .env file."
+
+## Quick Reference
+
+```python
+# Start session (REQUIRED - DO THIS FIRST)
+init_session(user_id="YOUR_USERNAME")
+
+# Get context for current task
+recall_memories(user_id="YOUR_USERNAME", query="<user's question>")
+
+# Track current work
+add_to_working_memory(session_id="...", content="...", content_type="task_state")
+
+# Save important learnings
+store_memory(user_id="YOUR_USERNAME", content="...", memory_category="semantic")
+
+# Get combined context for complex tasks
+get_relevant_context(session_id="...", user_id="YOUR_USERNAME", query="...", token_budget=4000)
+```
+
+## Verification
+
+If you're reading this rule, FML is configured. The FML MCP server runs at:
+- MCP Server: Launched by Cursor via ~/.cursor/mcp.json
+- HTTP API: http://localhost:8082 (for dashboard)
+- Brain: Local Firebolt Core at http://localhost:3473

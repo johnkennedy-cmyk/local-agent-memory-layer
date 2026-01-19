@@ -1,0 +1,79 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+logs/
+
+# Local development
+*.db
+*.sqlite
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+
+# Additional credential protection
+*.secret
+secrets/
+credentials/
+config.local.*
+*.credentials
+
+# IDE secret storage (additional patterns)
+.vscode/settings.json
+.idea/workspace.xml
+*.code-workspace
+
+# OS credential stores
+.keychain/
+*.keychain
