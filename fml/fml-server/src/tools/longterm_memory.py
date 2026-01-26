@@ -11,6 +11,7 @@ from src.llm.embeddings import embedding_service
 from src.llm.ollama import ollama_service
 from src.memory.taxonomy import validate_subtype
 from src.metrics import log_tool_error
+from src.security import validate_content_for_storage, SecurityViolation
 
 
 def register_longterm_memory_tools(mcp: FastMCP):
@@ -74,6 +75,23 @@ def register_longterm_memory_tools(mcp: FastMCP):
         source_session: Optional[str]
     ) -> str:
         """Internal implementation of store_memory."""
+        # Security check: validate content before storing
+        is_safe, error_msg, violations = validate_content_for_storage(content)
+        if not is_safe:
+            return json.dumps({
+                "error": "SECURITY_VIOLATION",
+                "message": error_msg,
+                "violations": [
+                    {
+                        "pattern": v.pattern_name,
+                        "severity": v.severity,
+                        "description": v.description
+                    }
+                    for v in violations
+                ],
+                "hint": "Sensitive data like API keys, passwords, and tokens should not be stored in memory. Store references or descriptions instead."
+            })
+
         memory_id = str(uuid.uuid4())
 
         # Parse entities if provided as string
@@ -438,6 +456,23 @@ def register_longterm_memory_tools(mcp: FastMCP):
         re_embedded = False
 
         if content is not None:
+            # Security check: validate new content before updating
+            is_safe, error_msg, violations = validate_content_for_storage(content)
+            if not is_safe:
+                return json.dumps({
+                    "error": "SECURITY_VIOLATION",
+                    "message": error_msg,
+                    "violations": [
+                        {
+                            "pattern": v.pattern_name,
+                            "severity": v.severity,
+                            "description": v.description
+                        }
+                        for v in violations
+                    ],
+                    "hint": "Sensitive data like API keys, passwords, and tokens should not be stored in memory."
+                })
+
             updates.append("content = ?")
             params.append(content)
             # Regenerate embedding

@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from src.db.client import db
 from src.llm.embeddings import embedding_service
+from src.security import validate_content_for_storage
 
 
 def register_working_memory_tools(mcp: FastMCP):
@@ -86,6 +87,23 @@ def register_working_memory_tools(mcp: FastMCP):
         Returns:
             JSON with item_id, token_count, and any evicted items
         """
+        # Security check: validate content before storing
+        is_safe, error_msg, violations = validate_content_for_storage(content)
+        if not is_safe:
+            return json.dumps({
+                "error": "SECURITY_VIOLATION",
+                "message": error_msg,
+                "violations": [
+                    {
+                        "pattern": v.pattern_name,
+                        "severity": v.severity,
+                        "description": v.description
+                    }
+                    for v in violations
+                ],
+                "hint": "Sensitive data like API keys, passwords, and tokens should not be stored in working memory."
+            })
+
         item_id = str(uuid.uuid4())
         token_count = embedding_service.count_tokens(content)
 

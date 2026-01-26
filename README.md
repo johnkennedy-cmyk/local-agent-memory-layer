@@ -339,12 +339,88 @@ Firebolt-Memory-Layer/
 
 ---
 
-## Security Notes
+## Security
 
-- **Never commit `.env` files** - They contain credentials
-- **No API keys in code** - All secrets via environment variables
-- **Local-first** - No data leaves your machine when using Firebolt Core + Ollama
-- Pre-commit hooks are configured to scan for secrets
+FML implements multiple layers of security to protect sensitive data.
+
+### Built-in Secret Detection
+
+FML includes **programmatic security validation** that automatically blocks storage of sensitive data. When you attempt to store content containing secrets, the operation is rejected with a detailed error.
+
+**Detected patterns include:**
+
+| Category | Examples |
+|----------|----------|
+| **API Keys** | OpenAI (`sk-*`), GitHub (`ghp_*`), AWS (`AKIA*`), Google (`AIza*`), Anthropic, Slack, Stripe |
+| **Tokens** | Bearer tokens, JWT tokens, Authorization headers |
+| **Passwords** | Password assignments, database connection strings, passwords in URLs |
+| **Private Keys** | RSA, PGP, and generic private key blocks |
+| **Secrets** | Generic secret/token assignments, `.env`-style content |
+
+**Example rejection:**
+```json
+{
+  "error": "SECURITY_VIOLATION",
+  "message": "SECURITY BLOCK: Content contains 1 critical security violation(s). Detected: OpenAI API Key.",
+  "hint": "Sensitive data like API keys, passwords, and tokens should not be stored in memory."
+}
+```
+
+### Security Best Practices
+
+When using FML, follow these guidelines:
+
+1. **Never store actual credentials** - Store descriptions or references instead
+   - ❌ `"The API key is sk-abc123..."`
+   - ✅ `"OpenAI API key is stored in .env as OPENAI_API_KEY"`
+
+2. **Use environment variables** - All secrets should be in `.env` files
+   - `.env` files are git-ignored by default
+   - Use `.env.example` for templates with placeholder values
+
+3. **Local-first architecture** - When using Firebolt Core + Ollama:
+   - No data leaves your machine
+   - No cloud API calls required
+   - Full control over your data
+
+### Pre-commit Hooks
+
+The repository includes pre-commit hooks for additional security:
+
+```bash
+# Install pre-commit hooks
+cd fml/fml-server
+pip install pre-commit detect-secrets
+pre-commit install
+
+# Run security scan manually
+pre-commit run --all-files
+
+# Scan for secrets
+detect-secrets scan .
+```
+
+**Configured hooks:**
+- `detect-secrets` - Scans for hardcoded credentials
+- `detect-private-key` - Prevents committing private keys
+- `check-env-files` - Blocks `.env` file commits
+
+### Running Security Tests
+
+Verify the security validation is working:
+
+```bash
+cd fml/fml-server
+source .venv/bin/activate
+python scripts/test_security.py
+```
+
+### Reporting Security Issues
+
+If you discover a security vulnerability, please:
+1. **Do not** open a public issue
+2. Email the maintainer directly with details
+3. Allow time for a fix before public disclosure
 
 ---
 
