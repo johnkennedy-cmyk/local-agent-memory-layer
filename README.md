@@ -361,6 +361,68 @@ python -m src.http_api
 
 Dashboard runs at `http://localhost:5174`
 
+The dashboard visualizes both the FML memory flow and the optional Firebolt MCP query flow (see below).
+
+---
+
+## Running with Firebolt MCP (Optional)
+
+For full Firebolt capabilities alongside memory management, you can run both FML and the official Firebolt MCP server in parallel. This gives your agent:
+
+- **FML**: Persistent memory storage and semantic recall
+- **Firebolt MCP**: Direct SQL queries against Firebolt Core databases
+
+The dashboard UI shows both data flows side-by-side, demonstrating how they work together through Firebolt Core.
+
+### Installing Firebolt MCP
+
+The Firebolt MCP server is available via npm:
+
+```bash
+npm install -g @anthropic/firebolt-mcp
+# Or use npx directly in the config
+```
+
+### Combined MCP Configuration
+
+To run both servers, update your `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "fml": {
+      "command": "/path/to/Firebolt-Memory-Layer/fml/fml-server/.venv/bin/python",
+      "args": ["-m", "src.server"],
+      "cwd": "/path/to/Firebolt-Memory-Layer/fml/fml-server",
+      "env": {
+        "PYTHONPATH": "/path/to/Firebolt-Memory-Layer/fml/fml-server"
+      }
+    },
+    "firebolt": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/firebolt-mcp"],
+      "env": {
+        "FIREBOLT_CORE_URL": "http://localhost:3473"
+      }
+    }
+  }
+}
+```
+
+### How They Work Together
+
+| Server | Purpose | Tools |
+|--------|---------|-------|
+| **FML** | Memory management | `store_memory`, `recall_memories`, `get_relevant_context`, etc. |
+| **Firebolt MCP** | SQL queries | `firebolt_query`, `firebolt_connect`, `firebolt_docs_search` |
+
+**Example workflow:**
+1. Agent uses FML to recall relevant memories about a project
+2. Agent uses Firebolt MCP to query actual data from your databases
+3. Agent uses FML to store new learnings from the analysis
+
+Both servers connect to the same Firebolt Core instance, so your memory data and query data live in the same database engine.
+
 ---
 
 ## Project Structure
