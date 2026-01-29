@@ -895,7 +895,7 @@ function ServicePanel({ name, data, config, delay = 0 }) {
           <span className="metric-value">{data.p95_latency_ms?.toFixed(1) || 0}ms</span>
         </div>
         <div className="metric">
-          <span className="metric-label">Total Calls</span>
+          <span className="metric-label">All-Time Calls</span>
           <span className="metric-value">{data.total_calls?.toLocaleString() || 0}</span>
         </div>
         <div className="metric">
