@@ -733,7 +733,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             <div className="node-icon">🖥️</div>
             <div className="node-label">Cursor IDE</div>
-            <div className="node-action">"How do I connect to Firebolt?"</div>
+            <div className="node-action">"What's the GitHub auth method we use?"</div>
           </div>
           
           {/* Firebolt MCP Server Node */}
