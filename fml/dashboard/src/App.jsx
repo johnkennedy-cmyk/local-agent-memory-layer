@@ -1003,14 +1003,18 @@ function RecentCalls({ calls, delay = 0 }) {
       <div className="calls-table">
         <div className="calls-header">
           <span>Time</span>
+          <span>Service</span>
           <span>Operation</span>
           <span>Latency</span>
           <span>Status</span>
         </div>
-        {(calls || []).slice(0, 8).map((call, i) => (
+        {(calls || []).slice(0, 10).map((call, i) => (
           <div key={i} className="calls-row">
             <span className="call-time">
               {new Date(call.timestamp).toLocaleTimeString()}
+            </span>
+            <span className={`call-service ${call.service}`}>
+              {call.service === 'embedding' ? '🔢 Embed' : '🦙 LLM'}
             </span>
             <span className="call-operation">{call.operation}</span>
             <span className="call-latency">{call.latency_ms}ms</span>
@@ -1082,11 +1086,27 @@ export default function App() {
 
   const fetchCalls = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/calls/ollama`)
-      if (response.ok) {
-        const data = await response.json()
-        setRecentCalls(data.calls || [])
+      // Fetch both ollama (classification) and embedding calls
+      const [ollamaRes, embeddingRes] = await Promise.all([
+        fetch(`${API_BASE}/calls/ollama`),
+        fetch(`${API_BASE}/calls/embedding`)
+      ])
+      
+      let allCalls = []
+      
+      if (ollamaRes.ok) {
+        const data = await ollamaRes.json()
+        allCalls = allCalls.concat((data.calls || []).map(c => ({ ...c, service: 'classification' })))
       }
+      
+      if (embeddingRes.ok) {
+        const data = await embeddingRes.json()
+        allCalls = allCalls.concat((data.calls || []).map(c => ({ ...c, service: 'embedding' })))
+      }
+      
+      // Sort by timestamp descending and take top 50
+      allCalls.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      setRecentCalls(allCalls.slice(0, 50))
     } catch (e) {
       // API not available
     }
@@ -2152,8 +2172,8 @@ export default function App() {
 
         .calls-header {
           display: grid;
-          grid-template-columns: 100px 1fr 80px 50px;
-          gap: 12px;
+          grid-template-columns: 85px 70px 1fr 70px 40px;
+          gap: 8px;
           padding-bottom: 12px;
           border-bottom: 1px solid var(--border-subtle);
           color: var(--text-muted);
@@ -2164,9 +2184,9 @@ export default function App() {
 
         .calls-row {
           display: grid;
-          grid-template-columns: 100px 1fr 80px 50px;
-          gap: 12px;
-          padding: 10px 0;
+          grid-template-columns: 85px 70px 1fr 70px 40px;
+          gap: 8px;
+          padding: 8px 0;
           border-bottom: 1px solid var(--border-subtle);
         }
 
@@ -2174,12 +2194,34 @@ export default function App() {
           color: var(--text-muted);
         }
 
+        .call-service {
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .call-service.embedding {
+          background: rgba(247, 42, 48, 0.15);
+          color: var(--accent-fire);
+        }
+
+        .call-service.classification {
+          background: rgba(255, 72, 72, 0.15);
+          color: var(--accent-green);
+        }
+
         .call-operation {
           color: var(--accent-cyan);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .call-latency {
           color: var(--text-secondary);
+          text-align: right;
         }
 
         .call-status.success {
