@@ -1260,20 +1260,22 @@ export default function App() {
             <div className="memory-list">
               {safeStats.memory.top_accessed.map((mem, i) => (
                 <div key={i} className="memory-item">
-                  <span 
-                    className="memory-category" 
-                    style={{ background: CATEGORY_COLORS[mem.category] || COLORS.fire }}
-                  >
-                    {mem.category}
-                  </span>
-                  <span className="memory-id">{mem.memory_id}</span>
-                  <span className="memory-access">{mem.access_count} accesses</span>
-                  <div className="memory-importance">
-                    <div 
-                      className="importance-bar" 
-                      style={{ width: `${mem.importance * 100}%` }}
-                    />
+                  <div className="memory-header">
+                    <span 
+                      className="memory-category" 
+                      style={{ background: CATEGORY_COLORS[mem.category] || COLORS.fire }}
+                    >
+                      {mem.category}
+                    </span>
+                    <span className="memory-access">{mem.access_count} accesses</span>
+                    <div className="memory-importance">
+                      <div 
+                        className="importance-bar" 
+                        style={{ width: `${mem.importance * 100}%` }}
+                      />
+                    </div>
                   </div>
+                  <div className="memory-content">{mem.content_preview || mem.memory_id}</div>
                 </div>
               ))}
             </div>
@@ -2118,13 +2120,18 @@ export default function App() {
         }
 
         .memory-item {
-          display: grid;
-          grid-template-columns: 100px 1fr 100px 120px;
-          gap: 16px;
-          align-items: center;
-          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 14px 16px;
           background: var(--bg-secondary);
           border-radius: 8px;
+        }
+
+        .memory-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
 
         .memory-category {
@@ -2137,18 +2144,21 @@ export default function App() {
           color: var(--bg-primary);
         }
 
-        .memory-id {
-          font-family: var(--font-mono);
-          font-size: 12px;
-          color: var(--text-secondary);
+        .memory-content {
+          font-size: 13px;
+          line-height: 1.5;
+          color: var(--text-primary);
+          word-break: break-word;
         }
 
         .memory-access {
-          font-size: 12px;
+          font-size: 11px;
           color: var(--text-muted);
+          margin-left: auto;
         }
 
         .memory-importance {
+          width: 80px;
           height: 6px;
           background: var(--bg-card);
           border-radius: 3px;
@@ -2183,8 +2193,11 @@ export default function App() {
             gap: 16px;
             align-items: flex-start;
           }
-          .memory-item {
-            grid-template-columns: 1fr 1fr;
+          .memory-header {
+            flex-wrap: wrap;
+          }
+          .memory-importance {
+            width: 60px;
           }
         }
       `}</style>

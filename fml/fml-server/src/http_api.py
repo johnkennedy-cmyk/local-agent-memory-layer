@@ -152,7 +152,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
             by_category = {row[0]: row[1] for row in category_result}
 
             top_accessed = db.execute("""
-                SELECT memory_id, memory_category, access_count, importance
+                SELECT memory_id, memory_category, access_count, importance, content
                 FROM long_term_memories
                 WHERE deleted_at IS NULL
                 ORDER BY access_count DESC
@@ -236,6 +236,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                         "category": row[1],
                         "access_count": row[2],
                         "importance": row[3],
+                        "content_preview": (row[4][:100] + "..." if len(row[4]) > 100 else row[4]) if row[4] else "",
                     }
                     for row in top_accessed
                 ],
