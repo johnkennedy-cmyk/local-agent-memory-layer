@@ -932,7 +932,7 @@ function ServicePanel({ name, data, config, delay = 0 }) {
               />
               <Tooltip 
                 contentStyle={{ 
-                  background: '#1a1a25', 
+                  background: '#F5EBEB', 
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px'
                 }}
@@ -979,7 +979,7 @@ function MemoryDistribution({ data, delay = 0 }) {
           </Pie>
           <Tooltip 
             contentStyle={{ 
-              background: '#1a1a25', 
+              background: '#F5EBEB', 
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: '8px'
             }}
@@ -1192,9 +1192,9 @@ export default function App() {
             delay={100}
           />
           <StatCard 
-            title="Active Sessions" 
+            title="Session History" 
             value={safeStats.memory?.active_sessions || 0}
-            icon="⚡"
+            icon="📋"
             color="cyan"
             delay={150}
           />
@@ -1491,7 +1491,7 @@ export default function App() {
 
         .dataflow-container {
           background: linear-gradient(135deg, rgba(247, 42, 48, 0.03), rgba(247, 42, 48, 0.03));
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(26, 4, 4, 0.1);
           border-radius: 16px;
           padding: 40px;
           position: relative;
@@ -1506,8 +1506,8 @@ export default function App() {
           position: absolute;
           top: 20px;
           left: 20px;
-          background: rgba(10, 10, 15, 0.95);
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(26, 4, 4, 0.12);
           border-radius: 12px;
           padding: 16px;
           z-index: 10;
@@ -1521,7 +1521,7 @@ export default function App() {
           color: var(--text-primary);
           margin-bottom: 12px;
           padding-bottom: 8px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid rgba(26, 4, 4, 0.1);
         }
 
         .flow-steps-legend .legend-steps {
@@ -1575,7 +1575,7 @@ export default function App() {
           position: absolute;
           top: 20px;
           right: 20px;
-          background: rgba(10, 10, 15, 0.95);
+          background: rgba(255, 255, 255, 0.95);
           border: 1px solid rgba(172, 36, 34, 0.3);
           border-radius: 12px;
           padding: 16px;
@@ -1713,7 +1713,7 @@ export default function App() {
         /* Flow Nodes */
         .flow-node {
           background: rgba(20, 20, 30, 0.95);
-          border: 2px solid rgba(255, 255, 255, 0.15);
+          border: 2px solid rgba(26, 4, 4, 0.12);
           border-radius: 12px;
           padding: 20px 24px;
           text-align: center;
@@ -1879,14 +1879,16 @@ export default function App() {
         }
 
         .legend-line.response {
-          background: var(--accent-green);
+          background: transparent;
           background-image: repeating-linear-gradient(
             90deg,
             var(--accent-green) 0px,
-            var(--accent-green) 5px,
-            transparent 5px,
-            transparent 10px
+            var(--accent-green) 4px,
+            transparent 4px,
+            transparent 8px
           );
+          border: 1px dashed var(--accent-green);
+          height: 3px;
         }
 
         .legend-dot {

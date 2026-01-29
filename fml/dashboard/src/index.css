@@ -1,30 +1,30 @@
 :root {
-  /* Firebolt Brand Color Palette */
-  --bg-primary: #0E0202;
-  --bg-secondary: #1A0404;
-  --bg-card: #332621;
-  --bg-card-hover: #443733;
+  /* Firebolt Brand Color Palette - LIGHT MODE */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FFF2F3;
+  --bg-card: #F5EBEB;
+  --bg-card-hover: #FFFCF9;
   
   /* Primary Firebolt Red */
   --accent-fire: #F72A30;
-  --accent-fire-glow: rgba(247, 42, 48, 0.3);
+  --accent-fire-glow: rgba(247, 42, 48, 0.15);
   --accent-fire-dark: #AC2422;
   --accent-fire-light: #FF4848;
   
-  /* Secondary accents - using Firebolt neutrals */
+  /* Secondary accents */
   --accent-cyan: #F72A30;
-  --accent-cyan-glow: rgba(247, 42, 48, 0.2);
+  --accent-cyan-glow: rgba(247, 42, 48, 0.1);
   --accent-purple: #AC2422;
   --accent-green: #FF4848;
   --accent-yellow: #FFF2F3;
   
-  /* Text colors from Firebolt palette */
-  --text-primary: #E5E1E1;
-  --text-secondary: #998A85;
-  --text-muted: #665555;
+  /* Text colors - dark on light */
+  --text-primary: #1A0404;
+  --text-secondary: #665555;
+  --text-muted: #998A85;
   
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(26, 4, 4, 0.1);
   --border-accent: rgba(247, 42, 48, 0.4);
   
   /* Firebolt Typography */
@@ -32,9 +32,9 @@
   --font-body: 'Inter', sans-serif;
   --font-mono: 'Roboto Mono', monospace;
   
-  /* Effects */
-  --shadow-glow: 0 0 30px rgba(247, 42, 48, 0.15);
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.4);
+  /* Effects - softer for light mode */
+  --shadow-glow: 0 0 20px rgba(247, 42, 48, 0.1);
+  --shadow-card: 0 4px 16px rgba(26, 4, 4, 0.08);
   
   /* Firebolt-specific surface colors */
   --surface-light: #F5EBEB;
@@ -60,7 +60,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
 }
 
-/* Animated background gradient - Firebolt brand colors */
+/* Subtle background gradient - Firebolt light mode */
 body::before {
   content: '';
   position: fixed;
@@ -69,9 +69,9 @@ body::before {
   right: 0;
   bottom: 0;
   background: 
-    radial-gradient(ellipse at 20% 20%, rgba(247, 42, 48, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(172, 36, 34, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(255, 72, 72, 0.04) 0%, transparent 60%);
+    radial-gradient(ellipse at 20% 20%, rgba(247, 42, 48, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(245, 235, 235, 0.5) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(255, 242, 243, 0.3) 0%, transparent 60%);
   pointer-events: none;
   z-index: -1;
 }
@@ -80,14 +80,14 @@ body::before {
   min-height: 100vh;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - light mode */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: var(--bg-card);
 }
 
 ::-webkit-scrollbar-thumb {
