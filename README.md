@@ -183,7 +183,14 @@ python scripts/test_tools.py
 python scripts/test_security.py
 ```
 
-### Step 8: Configure Cursor to Use FML
+### Step 8: Configure MCP Client to Use FML
+
+FML works with any MCP-compatible client. See **[Platform Setup Guide](fml/fml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
+- **Claude Code** (Anthropic)
+- **Google Gemini** / Antigravity Codes  
+- **Cursor IDE** (shown below)
+
+#### For Cursor IDE
 
 Create or edit `~/.cursor/mcp.json`:
 
@@ -219,6 +226,8 @@ Example for typical setup:
   }
 }
 ```
+
+Configuration templates are available in `fml/fml-server/config/` directory.
 
 ### Step 9: Add Global Cursor Rules
 

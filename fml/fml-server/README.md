@@ -60,7 +60,14 @@ An MCP server that provides intelligent memory management for LLM applications, 
    python -m src.server
    ```
 
-## Using with Cursor
+## Using with MCP Clients
+
+FML works with any MCP-compatible client. See **[Platform Setup Guide](docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
+- **Claude Code** (Anthropic)
+- **Google Gemini** / Antigravity Codes
+- **Cursor IDE** (current setup)
+
+### Quick Setup for Cursor
 
 Add to your Cursor settings (`.cursor/mcp.json`):
 
@@ -78,6 +85,11 @@ Add to your Cursor settings (`.cursor/mcp.json`):
   }
 }
 ```
+
+Configuration templates are available in `config/` directory:
+- `cursor-mcp.json.template` - For Cursor IDE
+- `claude-code-mcp.json.template` - For Claude Code
+- `google-gemini-mcp.json.template` - For Google Gemini
 
 ## Configuration
 
