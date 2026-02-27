@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "laml": {
+      "command": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
+      "args": ["-m", "src.server"],
+      "cwd": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server",
+      "env": {
+        "PYTHONPATH": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server"
+      }
+    }
+  }
+}

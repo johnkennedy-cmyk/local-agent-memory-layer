@@ -1,6 +1,6 @@
-# Firebolt Memory Layer (FML)
+# Local Agent Memory Layer (LAML)
 
-An intelligent, persistent memory system for LLM agents using local Firebolt Core with HNSW vector search. Designed to give Cursor (and other MCP-compatible tools) long-term memory that persists across sessions.
+An intelligent, persistent memory system for LLM agents using a local vector database with HNSW (or equivalent) vector search. Designed to give Cursor (and other MCP-compatible tools) long-term memory that persists across sessions, while keeping the choice of local database and model flexible (Firebolt Core + Ollama by default in this fork).
 
 ## Credits
 
@@ -20,12 +20,12 @@ An intelligent, persistent memory system for LLM agents using local Firebolt Cor
 
 ## Quick Start (Recommended)
 
-For the fastest setup, use the bootstrap script after cloning:
+For the fastest setup, use the bootstrap script after cloning this fork:
 
 ```bash
-# Clone the repository
-git clone git@github.com:firebolt-db/firebolt-memory-layer.git
-cd firebolt-memory-layer
+# Clone the repository (your fork)
+git clone git@github.com:johnkennedy-cmyk/local-agent-memory-layer.git
+cd local-agent-memory-layer
 
 # Ensure Firebolt Core and Ollama are running first (see Prerequisites below)
 
@@ -76,9 +76,11 @@ ollama pull llama3:8b        # For classification
 ollama pull nomic-embed-text  # For embeddings (768 dimensions)
 ```
 
-### Step 2: Install Firebolt Core (Local Database)
+### Step 2: Install a local vector database
 
-Firebolt Core is a local version of Firebolt that runs in Docker.
+The current implementation in this fork still uses **Firebolt Core** as the default local vector database, but the goal is to support multiple local backends (e.g., Firebolt Core, Elasticsearch, and others).
+
+If you want to use Firebolt Core today, follow these steps:
 
 ```bash
 # Install Firebolt Core using the official installer
@@ -93,15 +95,17 @@ curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"
 
 Firebolt Core runs at `http://localhost:3473` by default.
 
-### Step 3: Clone and Set Up FML
+> In future iterations of LAML, this section will be extended with alternative setup instructions for other local vector databases such as Elasticsearch.
+
+### Step 3: Clone and Set Up LAML
 
 ```bash
-# Clone this repository
-git clone git@github.com:firebolt-db/firebolt-memory-layer.git
-cd firebolt-memory-layer
+# Clone this repository (your fork)
+git clone git@github.com:johnkennedy-cmyk/local-agent-memory-layer.git
+cd local-agent-memory-layer
 
 # Create Python virtual environment
-cd fml/fml-server
+cd laml/laml-server
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -125,7 +129,7 @@ nano .env
 # Firebolt Core (Local)
 FIREBOLT_USE_CORE=true
 FIREBOLT_CORE_URL=http://localhost:3473
-FIREBOLT_DATABASE=fml_memory
+FIREBOLT_DATABASE=laml
 
 # Ollama (Local LLM - runs at localhost:11434)
 OLLAMA_HOST=http://localhost:11434
@@ -137,7 +141,7 @@ OLLAMA_EMBEDDING_DIMENSIONS=768
 # OPENAI_API_KEY=your-key-here
 ```
 
-### Step 5: Initialize Database Schema
+### Step 5: Initialize Database Schema (Firebolt Core backend)
 
 ```bash
 # Ensure virtual environment is active
@@ -147,8 +151,8 @@ source .venv/bin/activate
 python scripts/migrate.py
 ```
 
-This creates:
-- `fml_memory` database
+This creates (for the Firebolt Core backend):
+- `laml` database
 - `session_contexts` table (working memory sessions)
 - `working_memory_items` table (active context)
 - `long_term_memories` table (persistent memories with vector index)
@@ -183,9 +187,9 @@ python scripts/test_tools.py
 python scripts/test_security.py
 ```
 
-### Step 8: Configure MCP Client to Use FML
+### Step 8: Configure MCP Client to Use LAML
 
-FML works with any MCP-compatible client. See **[Platform Setup Guide](fml/fml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
+LAML works with any MCP-compatible client. See **[Platform Setup Guide](fml/fml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
 - **Claude Code** (Anthropic)
 - **Google Gemini** / Antigravity Codes  
 - **Cursor IDE** (shown below)
@@ -197,12 +201,12 @@ Create or edit `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "fml": {
-      "command": "/path/to/firebolt-memory-layer/fml/fml-server/.venv/bin/python",
+    "laml": {
+      "command": "/path/to/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
       "args": ["-m", "src.server"],
-      "cwd": "/path/to/firebolt-memory-layer/fml/fml-server",
+      "cwd": "/path/to/local-agent-memory-layer/laml/laml-server",
       "env": {
-        "PYTHONPATH": "/path/to/firebolt-memory-layer/fml/fml-server"
+        "PYTHONPATH": "/path/to/local-agent-memory-layer/laml/laml-server"
       }
     }
   }
@@ -215,23 +219,23 @@ Example for typical setup:
 ```json
 {
   "mcpServers": {
-    "fml": {
-      "command": "/Users/YOUR_USERNAME/DevelopmentArea/firebolt-memory-layer/fml/fml-server/.venv/bin/python",
+    "laml": {
+      "command": "/Users/YOUR_USERNAME/DevelopmentArea/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
       "args": ["-m", "src.server"],
-      "cwd": "/Users/YOUR_USERNAME/DevelopmentArea/firebolt-memory-layer/fml/fml-server",
+      "cwd": "/Users/YOUR_USERNAME/DevelopmentArea/local-agent-memory-layer/laml/laml-server",
       "env": {
-        "PYTHONPATH": "/Users/YOUR_USERNAME/DevelopmentArea/firebolt-memory-layer/fml/fml-server"
+        "PYTHONPATH": "/Users/YOUR_USERNAME/DevelopmentArea/local-agent-memory-layer/laml/laml-server"
       }
     }
   }
 }
 ```
 
-Configuration templates are available in `fml/fml-server/config/` directory.
+Configuration templates are available in `laml/laml-server/config/` directory.
 
 ### Step 9: Add Global Cursor Rules
 
-Create `~/.cursor/rules/fml-memory.mdc` with the content from `cursor-rules/fml-memory.mdc` in this repo. This tells all Cursor agents to use FML automatically.
+Create `~/.cursor/rules/laml-memory.mdc` with the content from `cursor-rules/laml-memory.mdc` in this repo. This tells all Cursor agents to use LAML automatically.
 
 ### Step 10: Restart Cursor
 
@@ -258,7 +262,7 @@ After setup, test in a new Cursor chat:
                       │ MCP Protocol (stdio)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  FML MCP Server (Python)                                    │
+│  LAML MCP Server (Python)                                   │
 │  ├── Working Memory Tools (5 tools)                         │
 │  ├── Long-Term Memory Tools (5 tools)                       │
 │  ├── Context Assembly Tools (2 tools)                       │
@@ -268,10 +272,10 @@ After setup, test in a new Cursor chat:
           ┌──────────┴──────────┐
           ▼                     ▼
 ┌─────────────────┐   ┌─────────────────┐
-│  Firebolt Core  │   │     Ollama      │
-│  (localhost:    │   │  (localhost:    │
-│   3473)         │   │   11434)        │
-│  - SQL Storage  │   │  - Embeddings   │
+│  Local Vector   │   │     Ollama      │
+│  Database       │   │  (localhost:    │
+│  (e.g. Firebolt │   │   11434)        │
+│   Core, Elastic)│   │  - Embeddings   │
 │  - Vector Index │   │  - Classification│
 └─────────────────┘   └─────────────────┘
 ```
@@ -307,7 +311,7 @@ After setup, test in a new Cursor chat:
 ### Stats (3 tools)
 | Tool | Description |
 |------|-------------|
-| `get_fml_stats` | Server statistics and metrics |
+| `get_laml_stats` | Server statistics and metrics |
 | `get_recent_calls` | Recent API call history |
 | `get_memory_analytics` | Memory distribution analytics |
 
@@ -328,7 +332,7 @@ Memories are auto-classified into human-aligned categories:
 
 ## Troubleshooting
 
-### FML not responding in Cursor
+### LAML not responding in Cursor
 1. Check Firebolt Core is running: `curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"`
 2. Check Ollama is running: `curl http://localhost:11434/api/tags`
 3. Check MCP config path is correct in `~/.cursor/mcp.json`
@@ -375,7 +379,7 @@ Firebolt Core only allows one write transaction at a time. The FML server uses a
 
 ## Dashboard (Optional)
 
-FML includes a React dashboard for monitoring:
+LAML includes a React dashboard for monitoring:
 
 ```bash
 cd fml/dashboard
@@ -398,9 +402,9 @@ The dashboard visualizes both the FML memory flow and the optional Firebolt MCP 
 
 ## Running with Firebolt MCP (Optional)
 
-For full Firebolt capabilities alongside memory management, you can run both FML and the official Firebolt MCP server in parallel. This gives your agent:
+For full Firebolt capabilities alongside memory management, you can run both LAML and the official Firebolt MCP server in parallel. This gives your agent:
 
-- **FML**: Persistent memory storage and semantic recall
+- **LAML**: Persistent memory storage and semantic recall
 - **Firebolt MCP**: Direct SQL queries against Firebolt Core databases
 
 The dashboard UI shows both data flows side-by-side, demonstrating how they work together through Firebolt Core.
@@ -421,12 +425,12 @@ To run both servers, update your `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "fml": {
-      "command": "/path/to/firebolt-memory-layer/fml/fml-server/.venv/bin/python",
+    "laml": {
+      "command": "/path/to/local-agent-memory-layer/fml/fml-server/.venv/bin/python",
       "args": ["-m", "src.server"],
-      "cwd": "/path/to/firebolt-memory-layer/fml/fml-server",
+      "cwd": "/path/to/local-agent-memory-layer/fml/fml-server",
       "env": {
-        "PYTHONPATH": "/path/to/firebolt-memory-layer/fml/fml-server"
+        "PYTHONPATH": "/path/to/local-agent-memory-layer/fml/fml-server"
       }
     },
     "firebolt": {
@@ -444,7 +448,7 @@ To run both servers, update your `~/.cursor/mcp.json`:
 
 | Server | Purpose | Tools |
 |--------|---------|-------|
-| **FML** | Memory management | `store_memory`, `recall_memories`, `get_relevant_context`, etc. |
+| **LAML** | Memory management | `store_memory`, `recall_memories`, `get_relevant_context`, etc. |
 | **Firebolt MCP** | SQL queries | `firebolt_query`, `firebolt_connect`, `firebolt_docs_search` |
 
 **Example workflow:**
@@ -459,7 +463,7 @@ Both servers connect to the same Firebolt Core instance, so your memory data and
 ## Project Structure
 
 ```
-firebolt-memory-layer/
+local-agent-memory-layer/
 ├── fml/
 │   ├── fml-server/              # Core MCP server (Python)
 │   │   ├── src/
@@ -476,7 +480,7 @@ firebolt-memory-layer/
 │   │       └── env.example      # Example environment config
 │   └── dashboard/               # React monitoring dashboard
 ├── cursor-rules/
-│   └── fml-memory.mdc           # Global Cursor rules for FML
+│   └── laml-memory.mdc          # Global Cursor rules for LAML
 ├── firebolt-core-local/         # Firebolt Core management (if present)
 └── README.md                    # This file
 ```
@@ -485,11 +489,11 @@ firebolt-memory-layer/
 
 ## Security
 
-FML implements multiple layers of security to protect sensitive data.
+LAML implements multiple layers of security to protect sensitive data.
 
 ### Built-in Secret Detection
 
-FML includes **programmatic security validation** that automatically blocks storage of sensitive data. When you attempt to store content containing secrets, the operation is rejected with a detailed error.
+LAML includes **programmatic security validation** that automatically blocks storage of sensitive data. When you attempt to store content containing secrets, the operation is rejected with a detailed error.
 
 **Detected patterns include:**
 
@@ -512,7 +516,7 @@ FML includes **programmatic security validation** that automatically blocks stor
 
 ### Security Best Practices
 
-When using FML, follow these guidelines:
+When using LAML, follow these guidelines:
 
 1. **Never store actual credentials** - Store descriptions or references instead
    - ❌ `"The API key is sk-abc123..."`
