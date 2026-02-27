@@ -121,4 +121,3 @@ class FireboltVectorStore(VectorStore):
                 """,
                 (memory_id,),
             )
-

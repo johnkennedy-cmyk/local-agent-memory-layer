@@ -13,6 +13,8 @@ repos:
           (?x)^(
             .*\.env\.example$|
             .*SECURITY.*\.md$|
+            .*test_security\.py$|
+            .*package-lock\.json$|
             .*\.git/.*
           )$
 
@@ -37,3 +39,7 @@ repos:
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: detect-private-key
+        exclude: |
+          (?x)^(
+            .*test_security\.py$
+          )$

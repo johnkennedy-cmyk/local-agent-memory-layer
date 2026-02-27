@@ -26,7 +26,7 @@ services:
       - FIREBOLT_USE_CORE=true
       - FIREBOLT_CORE_URL=http://host.docker.internal:3473
       - FIREBOLT_DATABASE=laml
-      
+
       # Ollama connection (running on host)
       - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_MODEL=llama3:8b

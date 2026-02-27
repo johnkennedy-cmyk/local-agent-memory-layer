@@ -73,37 +73,37 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
     def handle_stats(self, query):
         """Get LAML stats."""
         time_window = int(query.get('window', [60])[0])
-        
+
         # Get metrics from collector (local firebolt calls)
         service_stats = metrics.get_stats(time_window)
-        
+
         # Augment with database metrics for ollama/embedding (cross-process)
         try:
             # Get ollama metrics from database - windowed stats
             ollama_window = db.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as cnt,
                     COALESCE(AVG(latency_ms), 0) as avg_lat,
                     COALESCE(SUM(tokens_in), 0) as tok_in,
                     COALESCE(SUM(tokens_out), 0) as tok_out,
                     SUM(CASE WHEN success = FALSE THEN 1 ELSE 0 END) as errs
-                FROM service_metrics 
+                FROM service_metrics
                 WHERE service = 'ollama'
                 AND recorded_at > NOW() - INTERVAL '{time_window} minutes'
             """)
-            
+
             # Get ollama TOTAL counts (all time, no window filter)
             ollama_totals = db.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_cnt,
                     SUM(CASE WHEN success = FALSE THEN 1 ELSE 0 END) as total_errs
-                FROM service_metrics 
+                FROM service_metrics
                 WHERE service = 'ollama'
             """)
-            
+
             total_ollama_calls = int(ollama_totals[0][0]) if ollama_totals else 0
             total_ollama_errors = int(ollama_totals[0][1]) if ollama_totals and ollama_totals[0][1] else 0
-            
+
             if ollama_window and int(ollama_window[0][0]) > 0:
                 service_stats["services"]["ollama"] = {
                     "calls_in_window": int(ollama_window[0][0]),
@@ -125,31 +125,31 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                     "total_calls": total_ollama_calls,
                     "total_errors": total_ollama_errors,
                 }
-                
+
             # Get embedding metrics from database - windowed stats
             embed_window = db.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as cnt,
                     COALESCE(AVG(latency_ms), 0) as avg_lat,
                     COALESCE(SUM(tokens_in), 0) as tok_in,
                     SUM(CASE WHEN success = FALSE THEN 1 ELSE 0 END) as errs
-                FROM service_metrics 
+                FROM service_metrics
                 WHERE service = 'embedding'
                 AND recorded_at > NOW() - INTERVAL '{time_window} minutes'
             """)
-            
+
             # Get embedding TOTAL counts (all time, no window filter)
             embed_totals = db.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_cnt,
                     SUM(CASE WHEN success = FALSE THEN 1 ELSE 0 END) as total_errs
-                FROM service_metrics 
+                FROM service_metrics
                 WHERE service = 'embedding'
             """)
-            
+
             total_embed_calls = int(embed_totals[0][0]) if embed_totals else 0
             total_embed_errors = int(embed_totals[0][1]) if embed_totals and embed_totals[0][1] else 0
-            
+
             if embed_window and int(embed_window[0][0]) > 0:
                 service_stats["services"]["embedding"] = {
                     "calls_in_window": int(embed_window[0][0]),
@@ -238,9 +238,9 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
             # Get storage sizes from SHOW TABLES
             # Include all LAML tables for accurate total
             LAML_TABLES = [
-                'long_term_memories', 
-                'working_memory_items', 
-                'session_contexts', 
+                'long_term_memories',
+                'working_memory_items',
+                'session_contexts',
                 'memory_access_log',
                 'memory_relationships',  # Join table for memory linking
                 'tool_error_log',        # Error tracking
@@ -258,7 +258,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                         row_count = int(row[5]) if row[5] else 0
                         compressed = row[6] if row[6] else "0 B"
                         uncompressed = row[7] if row[7] else "0 B"
-                        
+
                         # Parse size strings like "75.70 KiB" to bytes
                         def parse_size(size_str):
                             if not size_str or size_str == "0.00 B":
@@ -270,10 +270,10 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                             unit = parts[1].upper()
                             multipliers = {"B": 1, "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3}
                             return int(value * multipliers.get(unit, 1))
-                        
+
                         comp_bytes = parse_size(compressed)
                         uncomp_bytes = parse_size(uncompressed)
-                        
+
                         storage_stats["tables"][table_name] = {
                             "rows": row_count,
                             "compressed": compressed,
@@ -346,12 +346,12 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
     def handle_calls(self, service, query):
         """Get recent calls for a service."""
         limit = int(query.get('limit', [50])[0])
-        
+
         # First try to get from database (persisted across restarts)
         calls = []
         try:
             result = db.execute(f"""
-                SELECT 
+                SELECT
                     recorded_at,
                     operation,
                     latency_ms,
@@ -364,7 +364,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 ORDER BY recorded_at DESC
                 LIMIT {limit}
             """)
-            
+
             calls = [
                 {
                     "timestamp": str(row[0]),
@@ -380,7 +380,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         except Exception:
             # Fall back to in-memory metrics
             calls = metrics.get_recent_calls(service, limit)
-        
+
         self.send_json({
             "service": service,
             "call_count": len(calls),
@@ -409,20 +409,27 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 "url": config.elastic.url,
                 "index_name": config.elastic.index_name,
             }
+        if config.vector_backend == "clickhouse":
+            payload["clickhouse"] = {
+                "host": config.clickhouse.host,
+                "port": config.clickhouse.port,
+                "database": config.clickhouse.database,
+                "table_name": config.clickhouse.table_name,
+            }
         self.send_json(payload)
 
     def handle_version(self):
         """Get server version info and detect code sync issues.
-        
+
         Returns server start time, code modification time, and whether
         the server needs a restart to pick up code changes.
         """
         # Re-check file mtime in case it changed
         current_mtime = datetime.fromtimestamp(os.path.getmtime(_CODE_FILE_PATH))
-        
+
         # Server needs restart if code was modified after server started
         needs_restart = current_mtime > _SERVER_START_TIME
-        
+
         self.send_json({
             "server_start_time": _SERVER_START_TIME.isoformat(),
             "code_modified_time": current_mtime.isoformat(),

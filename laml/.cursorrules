@@ -1,33 +1,10 @@
-# FML Memory System Rules
+# LAML Memory — same behavior as repo root
 
-You have access to the FML (Firebolt Memory Layer) MCP server for persistent memory management.
+You have access to the **LAML** (Local Agent Memory Layer) MCP server (`laml`) for persistent memory.
 
-## Session Management
-- At the start of each conversation, call `init_session` with user_id="jon" to initialize or resume a memory session
-- Use the returned session_id for all subsequent memory operations
+**Follow the same rules as the repo root `.cursorrules`:** init_session at conversation start (use a stable `user_id`, e.g. `default` or the machine username), recall_memories for context, add_to_working_memory after each substantive exchange, checkpoint_working_memory at boundaries, and store_memory at milestones. Do this in every session without being asked.
 
-## Automatic Conversation Logging
-After EVERY user message, call `add_to_working_memory` with:
-- content_type="message"
-- A summary of the user's query and your response (keep it concise but capture key details)
-
-## When to Store to Long-Term Memory
-Call `store_memory` when the user:
-- Makes decisions about architecture, tools, or approaches
-- Shares preferences about coding style, frameworks, or workflows
-- Provides important context about their project or environment
-- Asks you to remember something
-- Completes a significant task or milestone
-
-## When to Recall Memories
-Call `recall_memories` or `get_relevant_context` when:
-- Starting work on a task (to get relevant background)
-- The user asks "what did we decide about X?"
-- You need context about the project, user preferences, or past decisions
-- The user references something from a previous conversation
-
-## Best Practices
-- Use `get_relevant_context` for complex queries - it automatically combines working + long-term memory
-- Pin important working memory items that shouldn't be evicted
-- Use entity tags (e.g., "table:users", "file:api.py") for better recall
-- Call `checkpoint_working_memory` at natural conversation boundaries or when the session gets long
+- **user_id**: Use a stable identifier (e.g. `default`) so long-term memories are tied to the same user across sessions.
+- **session_id**: Use the value returned from init_session for all working-memory calls in this conversation.
+- Use **get_relevant_context** when you need combined working + long-term context.
+- Pin important working-memory items; use entity tags in store_memory when relevant.

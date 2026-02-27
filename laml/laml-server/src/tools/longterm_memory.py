@@ -377,7 +377,7 @@ def register_longterm_memory_tools(mcp: FastMCP):
                         })
                         seen_ids.add(row[0])
                 mem["related_memories"] = related_memories
-            
+
             breakdown["related_memories_included"] = sum(
                 len(m.get("related_memories", [])) for m in memories
             )

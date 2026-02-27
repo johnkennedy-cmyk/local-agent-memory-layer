@@ -4,6 +4,8 @@
 .env.*.local
 *.env
 .secrets*
+!.secrets.baseline
+!laml/.secrets.baseline
 credentials.json
 secrets.json
 
@@ -67,5 +69,5 @@ htmlcov/
 firebolt-core-local/data/
 firebolt-core-local/*.db
 
-# Pre-commit
-.secrets.baseline
+# Pre-commit (baseline is committed so pre-commit works out of the box)
+# .secrets.baseline is NOT ignored - allow so hooks pass on clone

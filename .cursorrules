@@ -1,0 +1,46 @@
+# LAML (Local Agent Memory Layer) — use in every session
+
+When the **laml** MCP server is available, you MUST use it for persistent memory. This applies to every conversation in Cursor, in this repo or any project that has LAML configured.
+
+## At the start of every conversation
+
+1. **Call `init_session`** with:
+   - `user_id`: a stable identifier for the human (e.g. `default`, or machine username if known). Use the same value for this user across sessions.
+   - `session_id`: optional; omit to create a new session, or pass a stable id (e.g. derived from workspace name) to resume the same working memory across restarts.
+2. Use the returned `session_id` for all working-memory calls in this conversation.
+3. **Call `recall_memories`** with the user's opening message (or a short summary) to load relevant long-term context before answering.
+
+## After each substantive exchange
+
+**Call `add_to_working_memory`** with:
+- `session_id`: from init_session
+- `content`: a concise summary of what the user asked and what you did (decisions, facts, next steps)
+- `content_type`: `message` (or `task_state` for task progress)
+- Pin important items (`pinned: true`) so they are not evicted.
+
+Do this without being asked — it is the default behavior.
+
+## At natural milestones
+
+- **Call `checkpoint_working_memory`** when the conversation reaches a natural boundary or gets long, so important items are promoted to long-term memory.
+- **Call `store_memory`** when the user makes decisions, shares preferences, completes a significant task, or asks you to remember something. Include `user_id` and a clear `content`; use entities (e.g. `table:users`, `file:api.py`) when relevant.
+
+## When you need richer context
+
+- Use **`get_relevant_context`** when you need combined working + long-term context for a complex query.
+
+This behavior is required for all sessions in Cursor where LAML is available (new or existing projects). Do not wait for the user to ask you to update memory.
+
+---
+
+## Before pushing to GitHub
+
+When the user asks to **push** changes (or to commit and push):
+
+1. **Run pre-commit checks first.** Do not run `git push` until they pass.
+   - From repo root: `cd laml && pre-commit run --all-files` (this repo’s config lives in `laml/`).
+   - If `pre-commit` is not found: install with `pip install pre-commit` (or `brew install pre-commit`), then run again. If the repo has `laml/scripts/setup-security.sh`, run it once to create `.secrets.baseline` and hooks.
+2. **Only after all hooks pass:** run `git push` (or `git add` / `git commit` / `git push` as appropriate).
+3. If any hook fails, fix the reported issues and re-run pre-commit; do not push until clean.
+
+This is mandatory. Do not skip pre-commit or push when hooks have failed.

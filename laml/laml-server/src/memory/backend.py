@@ -1,4 +1,4 @@
-"""Pluggable vector and long-term memory backend (Firebolt vs Elastic)."""
+"""Pluggable vector and long-term memory backend (Firebolt, Elastic, or ClickHouse)."""
 
 from __future__ import annotations
 
@@ -207,17 +207,23 @@ class FireboltMemoryRepository:
 
 
 def get_vector_store() -> VectorStore:
-    """Return the configured vector store (Firebolt or Elastic)."""
+    """Return the configured vector store (Firebolt, Elastic, or ClickHouse)."""
     if config.vector_backend == "elastic":
         from src.memory.elastic_vector_store import ElasticVectorStore
         return ElasticVectorStore()
+    if config.vector_backend == "clickhouse":
+        from src.memory.clickhouse_vector_store import ClickHouseVectorStore
+        return ClickHouseVectorStore()
     from src.memory.firebolt_vector_store import FireboltVectorStore
     return FireboltVectorStore()
 
 
 def get_memory_repository() -> MemoryRepository:
-    """Return the configured long-term memory repository (Firebolt or Elastic)."""
+    """Return the configured long-term memory repository (Firebolt, Elastic, or ClickHouse)."""
     if config.vector_backend == "elastic":
         from src.memory.elastic_memory_repo import ElasticMemoryRepository
         return ElasticMemoryRepository()
+    if config.vector_backend == "clickhouse":
+        from src.memory.clickhouse_memory_repo import ClickHouseMemoryRepository
+        return ClickHouseMemoryRepository()
     return FireboltMemoryRepository()

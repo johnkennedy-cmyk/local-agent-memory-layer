@@ -19,42 +19,42 @@ from src.memory.taxonomy import get_retrieval_weights
 
 async def test_get_relevant_context_flow():
     """Test the get_relevant_context flow to validate the diagram."""
-    
+
     print("=" * 80)
     print("FML DATA FLOW TEST")
     print("=" * 80)
     print(f"Started at: {datetime.now().isoformat()}")
     print()
-    
+
     # Clear metrics before test
     try:
         db.execute("DELETE FROM service_metrics WHERE recorded_at > NOW() - INTERVAL '1 minute'")
         print("✓ Cleared recent metrics")
     except Exception as e:
         print(f"⚠ Could not clear metrics: {e}")
-    
+
     print()
     print("-" * 80)
     print("STEP 1: Cursor → FML (get_relevant_context request)")
     print("-" * 80)
-    
+
     # Test parameters
     user_id = "johnkennedy"
     session_id = "test-session-" + str(int(time.time()))
     query = "How do I connect to Firebolt Core locally?"
     token_budget = 2000
-    
+
     print(f"Query: {query}")
     print(f"Session: {session_id}")
     print()
-    
+
     # Create session first
     db.execute("""
         INSERT INTO session_contexts (session_id, user_id, max_tokens, total_tokens)
         VALUES (?, ?, ?, 0)
     """, (session_id, user_id, 4000))
     print("✓ Created test session")
-    
+
     # Add some test working memory
     db.execute("""
         INSERT INTO working_memory_items (item_id, session_id, sequence_num, content_type, content, token_count, relevance_score, pinned)
@@ -62,10 +62,10 @@ async def test_get_relevant_context_flow():
     """, ("test-item-1", session_id, 1, "message", "Working on FML setup", 50, 1.0, False))
     print("✓ Added test working memory item")
     print()
-    
+
     # Track execution time for each step
     step_times = {}
-    
+
     # STEP 2: FML → Ollama (Detect Intent)
     print("-" * 80)
     print("STEP 2: FML → Ollama (Detect Intent)")
@@ -80,7 +80,7 @@ async def test_get_relevant_context_flow():
         print(f"✗ Error: {e}")
         detected_intent = "general"
     print()
-    
+
     # STEP 3: Ollama → FML (Intent Response)
     print("-" * 80)
     print("STEP 3: Ollama → FML (Intent Response)")
@@ -89,7 +89,7 @@ async def test_get_relevant_context_flow():
     weights = get_retrieval_weights(detected_intent)
     print(f"✓ Applied weights: {weights}")
     print()
-    
+
     # STEP 4: FML → Embeddings (Vectorize Query)
     print("-" * 80)
     print("STEP 4: FML → Embeddings (Vectorize Query)")
@@ -104,14 +104,14 @@ async def test_get_relevant_context_flow():
         print(f"✗ Error: {e}")
         return
     print()
-    
+
     # STEP 5: Embeddings → FML (Vector Response)
     print("-" * 80)
     print("STEP 5: Embeddings → FML (Vector Response)")
     print("-" * 80)
     print(f"✓ Received embedding vector")
     print()
-    
+
     # STEP 6: FML → Firebolt (Search Memories)
     print("-" * 80)
     print("STEP 6: FML → Firebolt (Search Memories)")
@@ -133,7 +133,7 @@ async def test_get_relevant_context_flow():
         print(f"✗ Error: {e}")
         results = []
     print()
-    
+
     # STEP 7: Firebolt → FML (Results)
     print("-" * 80)
     print("STEP 7: Firebolt → FML (Results)")
@@ -142,21 +142,21 @@ async def test_get_relevant_context_flow():
     for i, row in enumerate(results[:3], 1):
         print(f"  {i}. [{row[2]}] {row[1][:60]}...")
     print()
-    
+
     # STEP 8: FML → Cursor (Aggregated Context)
     print("-" * 80)
     print("STEP 8: FML → Cursor (Aggregated Context Response)")
     print("-" * 80)
     context_items = []
     total_tokens = 0
-    
+
     # Add working memory items
     working_items = db.execute("""
         SELECT content, token_count
         FROM working_memory_items
         WHERE session_id = ?
     """, (session_id,))
-    
+
     for item in working_items:
         context_items.append({
             "source": "working_memory",
@@ -164,7 +164,7 @@ async def test_get_relevant_context_flow():
             "tokens": item[1]
         })
         total_tokens += item[1]
-    
+
     # Add long-term memories
     for row in results:
         context_items.append({
@@ -174,13 +174,13 @@ async def test_get_relevant_context_flow():
             "importance": row[3]
         })
         total_tokens += 100  # estimate
-    
+
     print(f"✓ Assembled context:")
     print(f"  Working memory items: {len([c for c in context_items if c['source'] == 'working_memory'])}")
     print(f"  Long-term memories: {len([c for c in context_items if c['source'] == 'long_term_memory'])}")
     print(f"  Total estimated tokens: {total_tokens}")
     print()
-    
+
     # Summary
     print("=" * 80)
     print("FLOW VALIDATION SUMMARY")
@@ -198,7 +198,7 @@ async def test_get_relevant_context_flow():
     total_time = sum(step_times.values())
     print(f"Total execution time: {total_time:.3f}s")
     print()
-    
+
     # Check metrics table
     print("-" * 80)
     print("METRICS RECORDED:")
@@ -216,12 +216,12 @@ async def test_get_relevant_context_flow():
     except Exception as e:
         print(f"  ⚠ Could not retrieve metrics: {e}")
     print()
-    
+
     print("=" * 80)
     print("✓ DIAGRAM VALIDATED: Sequential flow is correct!")
     print("=" * 80)
     print()
-    
+
     # Clean up test session
     try:
         db.execute("DELETE FROM working_memory_items WHERE session_id = ?", (session_id,))

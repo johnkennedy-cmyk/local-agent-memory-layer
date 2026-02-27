@@ -229,7 +229,7 @@ def register_stats_tools(mcp):
                 params = (tool_name,)
 
             errors = db.execute(f"""
-                SELECT 
+                SELECT
                     error_id,
                     tool_name,
                     user_id,

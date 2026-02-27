@@ -1,6 +1,6 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications, using a local vector database as the data layer. You can choose **Firebolt** (default) or **Elasticsearch** for long-term memory and vector search.
+An MCP server that provides intelligent memory management for LLM applications, using a local vector database as the data layer. Working memory/session state uses **Firebolt Core**, and long-term memory/vector search can use **Firebolt** (default), **Elasticsearch**, or **ClickHouse**.
 
 ## Features
 
@@ -18,7 +18,11 @@ An MCP server that provides intelligent memory management for LLM applications, 
 ### Prerequisites
 
 - Python 3.10+
-- A local vector database: **Firebolt Core** (default) or **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md))
+- **Firebolt Core** for working memory/session state
+- A vector backend for long-term memory:
+  - **Firebolt Core / Firebolt Cloud** (default)
+  - **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md))
+  - **ClickHouse** (see [ClickHouse backend](docs/CLICKHOUSE_VECTOR_BACKEND.md))
 - OpenAI API key (for embeddings), or a compatible local embedding model
 - Ollama installed locally (for classification and/or embeddings)
 
@@ -45,12 +49,12 @@ An MCP server that provides intelligent memory management for LLM applications, 
    ollama pull mistral:7b
    ```
 
-4. **Test connections:**
+4. **Test connections (Firebolt, vector backend, Ollama):**
    ```bash
    python scripts/test_connections.py
    ```
 
-5. **Run database migrations:**
+5. **Run database migrations (Firebolt schemas):**
    ```bash
    python scripts/migrate.py
    ```
@@ -97,15 +101,92 @@ Environment variables (in `.env`):
 
 | Variable | Description |
 |----------|-------------|
-| `LAML_VECTOR_BACKEND` | `firebolt` (default) or `elastic` |
+| `LAML_VECTOR_BACKEND` | `firebolt` (default), `elastic`, or `clickhouse` |
 | `OPENAI_API_KEY` | OpenAI API key for embeddings (if using OpenAI) |
 | `FIREBOLT_ACCOUNT_NAME` | Firebolt account name (for Firebolt backend) |
 | `FIREBOLT_CLIENT_ID` | Firebolt client ID (for Firebolt backend) |
 | `FIREBOLT_CLIENT_SECRET` | Firebolt client secret (for Firebolt backend) |
-| `FIREBOLT_DATABASE` | Firebolt database name (for Firebolt backend) |
-| `FIREBOLT_ENGINE` | Firebolt engine name (for Firebolt backend) |
+| `FIREBOLT_DATABASE` | Firebolt database name (for Firebolt backend & working memory) |
+| `FIREBOLT_ENGINE` | Firebolt engine name (for Firebolt backend & working memory) |
+| `ELASTICSEARCH_URL` | Elasticsearch URL (for Elastic vector backend) |
+| `ELASTICSEARCH_INDEX` | Elasticsearch index name (for Elastic vector backend) |
+| `CLICKHOUSE_HOST` | ClickHouse host (for ClickHouse vector backend) |
+| `CLICKHOUSE_PORT` | ClickHouse HTTP port (for ClickHouse vector backend, default `8123`) |
+| `CLICKHOUSE_DATABASE` | ClickHouse database name (for ClickHouse vector backend) |
+| `CLICKHOUSE_TABLE` | ClickHouse table name (for ClickHouse vector backend) |
+| `CLICKHOUSE_USER` | ClickHouse user (for ClickHouse vector backend) |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password (for ClickHouse vector backend) |
+| `CLICKHOUSE_EMBEDDING_DIMENSIONS` | Embedding dimension (e.g. `768`) for ClickHouse backend |
 | `OLLAMA_HOST` | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_MODEL` | Ollama model to use (default: mistral:7b) |
+
+### Choose your vector backend
+
+After completing the base setup above, pick one of these quick paths:
+
+- **Firebolt (default, simplest)**
+  - Ensure Firebolt Core (or Firebolt Cloud) is running **before starting any MCP clients**:
+    ```bash
+    curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"
+    # Should return: 1
+    ```
+  - In `.env`, set `LAML_VECTOR_BACKEND=firebolt` and fill the `FIREBOLT_*` variables.
+  - Run Firebolt migrations:
+    ```bash
+    python scripts/migrate.py
+    ```
+  - Start the server:
+    ```bash
+    python -m src.server
+    ```
+
+- **Elasticsearch**
+  - See **[Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md)** for full details.
+  - Typical local setup:
+    ```bash
+    # From laml-server/
+    docker compose -f docker-compose.elastic.yml up -d
+    # Optional quick health check (expects 200):
+    curl http://localhost:9200
+    python scripts/init_elastic.py
+    ```
+  - In `.env`, set:
+    ```bash
+    LAML_VECTOR_BACKEND=elastic
+    ELASTICSEARCH_URL=http://localhost:9200
+    ELASTICSEARCH_INDEX=laml-long-term-memories
+    ```
+  - Then start the server:
+    ```bash
+    python -m src.server
+    ```
+
+- **ClickHouse**
+  - See **[ClickHouse backend](docs/CLICKHOUSE_VECTOR_BACKEND.md)** for full details.
+  - Typical local setup:
+    ```bash
+    # From laml-server/
+    docker compose -f docker-compose.clickhouse.yml up -d
+    # Wait until healthy before configuring any ClickHouse MCP:
+    curl http://localhost:8123/ping
+    # Should return: Ok.
+    python scripts/init_clickhouse.py
+    ```
+  - In `.env`, set:
+    ```bash
+    LAML_VECTOR_BACKEND=clickhouse
+    CLICKHOUSE_HOST=localhost
+    CLICKHOUSE_PORT=8123
+    CLICKHOUSE_DATABASE=laml
+    CLICKHOUSE_TABLE=long_term_memories
+    CLICKHOUSE_USER=default
+    CLICKHOUSE_PASSWORD=
+    CLICKHOUSE_EMBEDDING_DIMENSIONS=768
+    ```
+  - Then start the server:
+    ```bash
+    python -m src.server
+    ```
 
 ## MCP Tools
 

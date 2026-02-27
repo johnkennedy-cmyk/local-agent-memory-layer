@@ -124,14 +124,14 @@ CREATE TABLE IF NOT EXISTS memory_relationships (
     source_id       TEXT NOT NULL,      -- The memory creating the relationship
     target_id       TEXT NOT NULL,      -- The memory being linked to
     user_id         TEXT NOT NULL,      -- Owner (for authorization)
-    
+
     -- Relationship type for flexible linking
     relationship    TEXT NOT NULL,      -- 'related_to', 'part_of', 'depends_on', 'contradicts', 'updates'
-    
+
     -- Optional context
     strength        REAL DEFAULT 1.0,   -- Relationship strength (0.0-1.0)
     context         TEXT,               -- Why these are related
-    
+
     created_at      TIMESTAMPNTZ DEFAULT CURRENT_TIMESTAMP(),
     created_by      TEXT                -- Session or process that created this
 )

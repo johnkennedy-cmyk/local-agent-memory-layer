@@ -6,7 +6,7 @@ This document describes the memory quality evaluation and maintenance processes 
 
 FML includes automated tools to maintain memory quality over time:
 - **Daily backups** - Incremental backup of new memories
-- **Quality evaluation** - Find contradictions and stale memories  
+- **Quality evaluation** - Find contradictions and stale memories
 - **Decay system** - Reduce importance of unused memories
 - **Supersession** - Mark outdated memories as replaced
 

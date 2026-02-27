@@ -42,7 +42,7 @@ git secrets --add --allowed 'your-.*-id'
 if command -v pre-commit &> /dev/null; then
     echo "📦 Installing pre-commit hooks..."
     pre-commit install
-    
+
     if [ -f ".pre-commit-config.yaml" ]; then
         echo "✅ Pre-commit configuration found"
     else

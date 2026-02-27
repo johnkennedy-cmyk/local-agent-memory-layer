@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { 
+import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
@@ -96,9 +96,9 @@ const DEFAULT_BY_CATEGORY = {
 // Stat Card Component
 function StatCard({ title, value, subtitle, icon, color = 'fire', delay = 0 }) {
   return (
-    <div 
-      className="stat-card animate-slide-up" 
-      style={{ 
+    <div
+      className="stat-card animate-slide-up"
+      style={{
         animationDelay: `${delay}ms`,
         '--accent-color': COLORS[color] || COLORS.fire
       }}
@@ -139,53 +139,53 @@ const SERVICE_INFO = {
 function DataFlowDiagram({ config, delay = 0 }) {
   const ollamaHost = config?.ollama?.host || 'localhost:11434'
   const fireboltLocation = config?.brain_location === 'local' ? 'Local Vector DB' : 'Remote'
-  const fireboltUrl = config?.firebolt?.use_core 
-    ? config?.firebolt?.core_url 
+  const fireboltUrl = config?.firebolt?.use_core
+    ? config?.firebolt?.core_url
     : (config?.firebolt?.account_name || 'custom-backend')
 
   // SVG dimensions for the flow diagram
   const svgWidth = 1400
   const svgHeight = 750
-  
+
   // Node positions (centered coordinates) - shifted left to make room for legend
   const horizontalShift = -100  // Shift all boxes 100px left
-  
+
   const cursorX = svgWidth / 2 + horizontalShift
   const cursorY = 100
-  
+
   const fmlX = svgWidth / 2 + horizontalShift
   const fmlY = 320
-  
+
   // Firebolt MCP Server (separate from FML, on right side)
   const fireboltMcpX = 1020 + horizontalShift  // Balanced spacing with Ollama (was 1100)
   const fireboltMcpY = 320
-  
+
   const ollamaX = 380 + horizontalShift  // Moved closer to Embeddings (was 200)
   const ollamaY = 580
-  
+
   const embedX = svgWidth / 2 + horizontalShift
   const embedY = 580
-  
+
   const fireboltX = 1020 + horizontalShift  // Balanced spacing with Ollama (was 1100)
   const fireboltY = 580
-  
+
   // Node dimensions (increased for better text spacing)
   const nodeWidth = 220
   const nodeHeight = 140
-  
+
   // Offset for separating arrows (so they don't overlap)
   const arrowOffset = 25
-  
+
   // Calculate connection points (using left/right sides to avoid labels)
   // Cursor bottom: separate points for request and response
   const cursorBottomLeft = { x: cursorX - arrowOffset, y: cursorY + nodeHeight / 2 }
   const cursorBottomRight = { x: cursorX + arrowOffset, y: cursorY + nodeHeight / 2 }
   const cursorBottomCenter = { x: cursorX, y: cursorY + nodeHeight / 2 }
-  
+
   // Cursor right side: for Firebolt MCP connections (separated vertically)
   const cursorRightOut = { x: cursorX + nodeWidth / 2, y: cursorY - arrowOffset }  // Request (above)
   const cursorRightIn = { x: cursorX + nodeWidth / 2, y: cursorY + arrowOffset }   // Response (below)
-  
+
   // Firebolt MCP Server connection points
   const fireboltMcpTopLeft = { x: fireboltMcpX - arrowOffset, y: fireboltMcpY - nodeHeight / 2 }
   const fireboltMcpTopRight = { x: fireboltMcpX + arrowOffset, y: fireboltMcpY - nodeHeight / 2 }
@@ -193,36 +193,36 @@ function DataFlowDiagram({ config, delay = 0 }) {
   const fireboltMcpBottomRight = { x: fireboltMcpX + arrowOffset, y: fireboltMcpY + nodeHeight / 2 }
   const fireboltMcpLeft = { x: fireboltMcpX - nodeWidth / 2, y: fireboltMcpY }
   const fireboltMcpRight = { x: fireboltMcpX + nodeWidth / 2, y: fireboltMcpY }
-  
+
   // FML top: separate points for request in and response out
   const fmlTopLeft = { x: fmlX - arrowOffset, y: fmlY - nodeHeight / 2 }
   const fmlTopRight = { x: fmlX + arrowOffset, y: fmlY - nodeHeight / 2 }
-  
+
   // FML left side: request out (slightly above center), response in (slightly below center)
   const fmlLeftOut = { x: fmlX - nodeWidth / 2, y: fmlY - arrowOffset }
   const fmlLeftIn = { x: fmlX - nodeWidth / 2, y: fmlY + arrowOffset }
-  
+
   // FML right side: request out (slightly above center), response in (slightly below center)
   const fmlRightOut = { x: fmlX + nodeWidth / 2, y: fmlY - arrowOffset }
   const fmlRightIn = { x: fmlX + nodeWidth / 2, y: fmlY + arrowOffset }
-  
+
   // FML bottom: separate points for Embeddings connections (left and right)
   const fmlBottomLeft = { x: fmlX - arrowOffset, y: fmlY + nodeHeight / 2 }
   const fmlBottomRight = { x: fmlX + arrowOffset, y: fmlY + nodeHeight / 2 }
   const fmlBottom = { x: fmlX, y: fmlY + nodeHeight / 2 }
-  
+
   // Ollama right side: request in (slightly above), response out (slightly below)
   const ollamaRightIn = { x: ollamaX + nodeWidth / 2, y: ollamaY - arrowOffset }
   const ollamaRightOut = { x: ollamaX + nodeWidth / 2, y: ollamaY + arrowOffset }
-  
+
   // Embeddings top: request in (left of label), response out (right of label) - separated to avoid label
   const embedTopIn = { x: embedX - arrowOffset * 3.5, y: embedY - nodeHeight / 2 }
   const embedTopOut = { x: embedX + arrowOffset * 3.5, y: embedY - nodeHeight / 2 }
-  
+
   // Firebolt left side: request in (slightly above), response out (slightly below) - mirrors Ollama pattern
   const fireboltLeftIn = { x: fireboltX - nodeWidth / 2, y: fireboltY - arrowOffset }
   const fireboltLeftOut = { x: fireboltX - nodeWidth / 2, y: fireboltY + arrowOffset }
-  
+
   // Firebolt Core top (for Firebolt MCP Server connection) - separated points
   const fireboltCoreTopLeft = { x: fireboltX - arrowOffset, y: fireboltY - nodeHeight / 2 }
   const fireboltCoreTopRight = { x: fireboltX + arrowOffset, y: fireboltY - nodeHeight / 2 }
@@ -245,13 +245,13 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="legend-step"><span className="step-num response">8</span> LAML → Cursor (Context)</div>
           </div>
         </div>
-        
+
         {/* Database MCP Flow Legend (Right) */}
         <div className="flow-steps-legend-right">
           <div className="legend-title">Database MCP Flow (Parallel)</div>
           <div className="legend-subtitle">Direct DB Access - Independent of LAML</div>
           <div className="legend-description">
-            Cursor uses this for ad-hoc queries, schema exploration, debugging, 
+            Cursor uses this for ad-hoc queries, schema exploration, debugging,
             and raw data access without AI overhead. Works with Firebolt MCP or other DB MCPs.
           </div>
           <div className="legend-steps">
@@ -268,8 +268,8 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="use-case">• Export/inspect memories</div>
           </div>
         </div>
-        
-        <svg 
+
+        <svg
           className="flow-svg"
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           preserveAspectRatio="xMidYMid meet"
@@ -280,13 +280,13 @@ function DataFlowDiagram({ config, delay = 0 }) {
               <stop offset="0%" stopColor="#F72A30" stopOpacity="0.8" />
               <stop offset="100%" stopColor="#F72A30" stopOpacity="0.4" />
             </linearGradient>
-            
+
             {/* Gradient for response flow */}
             <linearGradient id="responseGradient" x1="0%" y1="100%" x2="0%" y2="0%">
               <stop offset="0%" stopColor="#FF4848" stopOpacity="0.8" />
               <stop offset="100%" stopColor="#FF4848" stopOpacity="0.4" />
             </linearGradient>
-            
+
             {/* Arrow marker for requests */}
             <marker
               id="arrowRequest"
@@ -300,7 +300,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
             >
               <path d="M0,0 L0,12 L12,6 z" fill="#F72A30" stroke="#F72A30" strokeWidth="0.5" />
             </marker>
-            
+
             {/* Arrow marker for responses */}
             <marker
               id="arrowResponse"
@@ -314,7 +314,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
             >
               <path d="M0,0 L0,12 L12,6 z" fill="#FF4848" stroke="#FF4848" strokeWidth="0.5" />
             </marker>
-            
+
             {/* Glow filter for animated packets */}
             <filter id="glow">
               <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -324,9 +324,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
               </feMerge>
             </filter>
           </defs>
-          
+
           {/* REQUEST FLOWS (downward, cyan) */}
-          
+
           {/* Cursor → Firebolt MCP Server (right side to top right, straight line) */}
           <path
             d={`M ${cursorRightOut.x} ${cursorRightOut.y} L ${fireboltMcpTopRight.x} ${fireboltMcpTopRight.y}`}
@@ -350,7 +350,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             A
           </text>
-          
+
           {/* Firebolt MCP Server → Firebolt Core (bottom left to top left, separated) */}
           <path
             d={`M ${fireboltMcpBottomLeft.x} ${fireboltMcpBottomLeft.y} L ${fireboltCoreTopLeft.x} ${fireboltCoreTopLeft.y}`}
@@ -374,7 +374,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             B
           </text>
-          
+
           {/* Firebolt Core → Firebolt MCP Server (top right to bottom right, separated) */}
           <path
             d={`M ${fireboltCoreTopRight.x} ${fireboltCoreTopRight.y} L ${fireboltMcpBottomRight.x} ${fireboltMcpBottomRight.y}`}
@@ -399,7 +399,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             C
           </text>
-          
+
           {/* Firebolt MCP Server → Cursor (top left to right side below, straight line) */}
           <path
             d={`M ${fireboltMcpTopLeft.x} ${fireboltMcpTopLeft.y} L ${cursorRightIn.x} ${cursorRightIn.y}`}
@@ -424,7 +424,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             D
           </text>
-          
+
           {/* Cursor → LAML (left side to left side, separated) */}
           <path
             d={`M ${cursorBottomLeft.x} ${cursorBottomLeft.y} L ${fmlTopLeft.x} ${fmlTopLeft.y}`}
@@ -459,7 +459,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${cursorBottomLeft.x} ${cursorBottomLeft.y} L ${fmlTopLeft.x} ${fmlTopLeft.y}`}
             />
           </circle>
-          
+
           {/* LAML → Ollama (left side to right side, separated) */}
           <path
             d={`M ${fmlLeftOut.x} ${fmlLeftOut.y} Q ${(fmlLeftOut.x + ollamaRightIn.x) / 2} ${fmlLeftOut.y + 120} ${ollamaRightIn.x} ${ollamaRightIn.y}`}
@@ -496,7 +496,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${fmlLeftOut.x} ${fmlLeftOut.y} Q ${(fmlLeftOut.x + ollamaRightIn.x) / 2} ${fmlLeftOut.y + 120} ${ollamaRightIn.x} ${ollamaRightIn.y}`}
             />
           </circle>
-          
+
           {/* LAML → Embeddings (bottom left to top left, straight line) */}
           <path
             d={`M ${fmlBottomLeft.x} ${fmlBottomLeft.y} L ${embedTopIn.x} ${embedTopIn.y}`}
@@ -533,7 +533,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${fmlBottomLeft.x} ${fmlBottomLeft.y} L ${embedTopIn.x} ${embedTopIn.y}`}
             />
           </circle>
-          
+
           {/* FML → Firebolt (right side to left side, mirrors Ollama pattern) */}
           <path
             d={`M ${fmlRightOut.x} ${fmlRightOut.y} Q ${(fmlRightOut.x + fireboltLeftIn.x) / 2} ${fmlRightOut.y + 120} ${fireboltLeftIn.x} ${fireboltLeftIn.y}`}
@@ -570,9 +570,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${fmlRightOut.x} ${fmlRightOut.y} Q ${(fmlRightOut.x + fireboltLeftIn.x) / 2} ${fmlRightOut.y + 120} ${fireboltLeftIn.x} ${fireboltLeftIn.y}`}
             />
           </circle>
-          
+
           {/* RESPONSE FLOWS (upward, green) */}
-          
+
           {/* Ollama → FML (right side to left side, separated) */}
           <path
             d={`M ${ollamaRightOut.x} ${ollamaRightOut.y} Q ${(ollamaRightOut.x + fmlLeftIn.x) / 2} ${ollamaRightOut.y - 120} ${fmlLeftIn.x} ${fmlLeftIn.y}`}
@@ -610,7 +610,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${ollamaRightOut.x} ${ollamaRightOut.y} Q ${(ollamaRightOut.x + fmlLeftIn.x) / 2} ${ollamaRightOut.y - 120} ${fmlLeftIn.x} ${fmlLeftIn.y}`}
             />
           </circle>
-          
+
           {/* Embeddings → FML (top right to bottom right, straight line) */}
           <path
             d={`M ${embedTopOut.x} ${embedTopOut.y} L ${fmlBottomRight.x} ${fmlBottomRight.y}`}
@@ -648,7 +648,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${embedTopOut.x} ${embedTopOut.y} L ${fmlBottomRight.x} ${fmlBottomRight.y}`}
             />
           </circle>
-          
+
           {/* Firebolt → FML (left side to right side, mirrors Ollama pattern) */}
           <path
             d={`M ${fireboltLeftOut.x} ${fireboltLeftOut.y} Q ${(fireboltLeftOut.x + fmlRightIn.x) / 2} ${fireboltLeftOut.y - 120} ${fmlRightIn.x} ${fmlRightIn.y}`}
@@ -686,7 +686,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
               path={`M ${fireboltLeftOut.x} ${fireboltLeftOut.y} Q ${(fireboltLeftOut.x + fmlRightIn.x) / 2} ${fireboltLeftOut.y - 120} ${fmlRightIn.x} ${fmlRightIn.y}`}
             />
           </circle>
-          
+
           {/* FML → Cursor (right side to right side, separated) */}
           <path
             d={`M ${fmlTopRight.x} ${fmlTopRight.y} L ${cursorBottomRight.x} ${cursorBottomRight.y}`}
@@ -723,11 +723,11 @@ function DataFlowDiagram({ config, delay = 0 }) {
             />
           </circle>
         </svg>
-        
+
         {/* Node overlays (positioned absolutely over SVG) */}
         <div className="flow-nodes-overlay">
           {/* Cursor Node */}
-          <div 
+          <div
             className="flow-node cursor-node"
             style={{
               left: `${(cursorX / svgWidth) * 100}%`,
@@ -743,9 +743,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-label">Cursor IDE</div>
             <div className="node-action">"What's the GitHub auth method we use?"</div>
           </div>
-          
+
           {/* Firebolt MCP Server Node */}
-          <div 
+          <div
             className="flow-node firebolt-mcp-node"
             style={{
               left: `${(fireboltMcpX / svgWidth) * 100}%`,
@@ -760,9 +760,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-action">Direct Queries</div>
             <div className="node-url">localhost:8080/sse</div>
           </div>
-          
+
           {/* FML Node */}
-          <div 
+          <div
             className="flow-node fml-node"
             style={{
               left: `${(fmlX / svgWidth) * 100}%`,
@@ -776,9 +776,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-label">LAML Server</div>
             <div className="node-action">Orchestrates & Aggregates</div>
           </div>
-          
+
           {/* Ollama Node */}
-          <div 
+          <div
             className="flow-node ollama-node"
             style={{
               left: `${(ollamaX / svgWidth) * 100}%`,
@@ -793,9 +793,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-action">Classify Intent</div>
             <div className="node-url">{ollamaHost}</div>
           </div>
-          
+
           {/* Embeddings Node */}
-          <div 
+          <div
             className="flow-node embed-node"
             style={{
               left: `${(embedX / svgWidth) * 100}%`,
@@ -810,9 +810,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-action">Generate Vector</div>
             <div className="node-url">{ollamaHost}</div>
           </div>
-          
+
           {/* Firebolt Node */}
-          <div 
+          <div
             className="flow-node firebolt-node"
             style={{
               left: `${(fireboltX / svgWidth) * 100}%`,
@@ -829,7 +829,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           </div>
         </div>
       </div>
-      
+
       <div className="flow-legend">
         <div className="legend-item">
           <span className="legend-line request"></span>
@@ -852,7 +852,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
 function ServicePanel({ name, data, config, delay = 0 }) {
   const info = SERVICE_INFO[name] || { title: name, description: '', icon: '📦' }
   const statusColor = (data.errors_in_window || 0) > 0 ? COLORS.yellow : COLORS.green
-  
+
   // Determine if service is local or cloud
   let location = 'local'
   let locationUrl = ''
@@ -860,12 +860,12 @@ function ServicePanel({ name, data, config, delay = 0 }) {
     locationUrl = config?.ollama?.host || 'localhost:11434'
   } else if (name === 'firebolt') {
     location = config?.firebolt?.use_core ? 'local' : 'cloud'
-    locationUrl = config?.firebolt?.use_core 
-      ? config?.firebolt?.core_url 
+    locationUrl = config?.firebolt?.use_core
+      ? config?.firebolt?.core_url
       : config?.firebolt?.account_name
   }
-  
-  const operationData = data.by_operation 
+
+  const operationData = data.by_operation
     ? Object.entries(data.by_operation).map(([op, stats]) => ({
         name: op,
         count: stats.count,
@@ -892,7 +892,7 @@ function ServicePanel({ name, data, config, delay = 0 }) {
         </span>
         <span className="location-url">{locationUrl}</span>
       </div>
-      
+
       <div className="service-metrics">
         <div className="metric">
           <span className="metric-label">Avg Latency</span>
@@ -932,22 +932,22 @@ function ServicePanel({ name, data, config, delay = 0 }) {
           <ResponsiveContainer width="100%" height={120}>
             <BarChart data={operationData} layout="vertical">
               <XAxis type="number" hide />
-              <YAxis 
-                type="category" 
-                dataKey="name" 
+              <YAxis
+                type="category"
+                dataKey="name"
                 width={80}
                 tick={{ fill: '#8888a0', fontSize: 11 }}
               />
-              <Tooltip 
-                contentStyle={{ 
-                  background: '#F5EBEB', 
+              <Tooltip
+                contentStyle={{
+                  background: '#F5EBEB',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px'
                 }}
                 labelStyle={{ color: '#f0f0f5' }}
               />
-              <Bar 
-                dataKey="count" 
+              <Bar
+                dataKey="count"
                 fill={COLORS.fire}
                 radius={[0, 4, 4, 0]}
               />
@@ -986,14 +986,14 @@ function MemoryDistribution({ data, delay = 0 }) {
               <Cell key={index} fill={entry.color} />
             ))}
           </Pie>
-          <Tooltip 
-            contentStyle={{ 
-              background: '#F5EBEB', 
+          <Tooltip
+            contentStyle={{
+              background: '#F5EBEB',
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: '8px'
             }}
           />
-          <Legend 
+          <Legend
             verticalAlign="bottom"
             iconType="circle"
             formatter={(value) => <span style={{ color: '#8888a0', fontSize: '12px' }}>{value}</span>}
@@ -1123,19 +1123,19 @@ const fetchStats = useCallback(async () => {
         fetch(`${API_BASE}/calls/ollama`),
         fetch(`${API_BASE}/calls/embedding`)
       ])
-      
+
       let allCalls = []
-      
+
       if (ollamaRes.ok) {
         const data = await ollamaRes.json()
         allCalls = allCalls.concat((data.calls || []).map(c => ({ ...c, service: 'classification' })))
       }
-      
+
       if (embeddingRes.ok) {
         const data = await embeddingRes.json()
         allCalls = allCalls.concat((data.calls || []).map(c => ({ ...c, service: 'embedding' })))
       }
-      
+
       // Sort by timestamp descending and take top 50
       allCalls.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       setRecentCalls(allCalls.slice(0, 50))
@@ -1149,7 +1149,7 @@ const fetchStats = useCallback(async () => {
     fetchCalls()
     fetchConfig()
     fetchVersion()
-    
+
     // Refresh every 5 seconds
     const interval = setInterval(() => {
       fetchStats()
@@ -1231,8 +1231,8 @@ const fetchStats = useCallback(async () => {
                 {brainConfig.brain_location === 'local' ? 'Local Vector DB' : 'Cloud'}
               </span>
               <span className="brain-detail">
-                {brainConfig.brain_location === 'local' 
-                  ? brainConfig.firebolt.core_url 
+                {brainConfig.brain_location === 'local'
+                  ? brainConfig.firebolt.core_url
                   : brainConfig.firebolt.account_name}
               </span>
             </div>
@@ -1257,7 +1257,7 @@ const fetchStats = useCallback(async () => {
             <strong>Server Running Stale Code</strong>
             <span>The HTTP API server needs to be restarted to pick up code changes.</span>
             <span className="warning-details">
-              Code modified: {new Date(versionInfo.code_modified_time).toLocaleString()} · 
+              Code modified: {new Date(versionInfo.code_modified_time).toLocaleString()} ·
               Server started: {new Date(versionInfo.server_start_time).toLocaleString()}
             </span>
           </div>
@@ -1281,22 +1281,22 @@ const fetchStats = useCallback(async () => {
 
         {/* Stats Row */}
         <section className="stats-row">
-          <StatCard 
-            title="Long-term Memories" 
+          <StatCard
+            title="Long-term Memories"
             value={safeStats.memory?.long_term_memories ?? 0}
             icon="🧠"
             color="fire"
             delay={100}
           />
-          <StatCard 
-            title="Session History" 
+          <StatCard
+            title="Session History"
             value={safeStats.memory?.active_sessions ?? 0}
             icon="📋"
             color="cyan"
             delay={150}
           />
-          <StatCard 
-            title="Working Memory" 
+          <StatCard
+            title="Working Memory"
             value={`${(safeStats.memory?.working_memory_tokens ?? 0).toLocaleString()} tokens`}
             subtitle={((safeStats.memory?.working_memory_items ?? 0) === 0 && (safeStats.memory?.long_term_memories ?? 0) === 0 && !safeStats.memory?.error)
               ? 'Use LAML in Cursor or run seed_core_memories.py to add data'
@@ -1305,8 +1305,8 @@ const fetchStats = useCallback(async () => {
             color="purple"
             delay={200}
           />
-          <StatCard 
-            title="Memory Data Size" 
+          <StatCard
+            title="Memory Data Size"
             value={safeStats.memory?.storage?.total_uncompressed_formatted || '0 B'}
             subtitle={`Raw data size before compression · ${safeStats.memory?.storage?.total_compressed_formatted || '0 B'} actual disk usage`}
             icon="💾"
@@ -1327,21 +1327,21 @@ const fetchStats = useCallback(async () => {
             <p className="services-hint demo">Using demo data. Start the LAML HTTP API on port 8082 for live metrics.</p>
           )}
           <div className="services-grid">
-            <ServicePanel 
-              name="ollama" 
-              data={displayServices.ollama} 
+            <ServicePanel
+              name="ollama"
+              data={displayServices.ollama}
               config={brainConfig}
               delay={300}
             />
-            <ServicePanel 
-              name="embedding" 
-              data={displayServices.embedding} 
+            <ServicePanel
+              name="embedding"
+              data={displayServices.embedding}
               config={brainConfig}
               delay={350}
             />
-            <ServicePanel 
-              name="firebolt" 
-              data={displayServices.firebolt} 
+            <ServicePanel
+              name="firebolt"
+              data={displayServices.firebolt}
               config={brainConfig}
               delay={400}
             />
@@ -1350,12 +1350,12 @@ const fetchStats = useCallback(async () => {
 
         {/* Charts Row */}
         <section className="charts-section">
-          <MemoryDistribution 
-            data={safeStats.memory?.by_category ?? DEFAULT_BY_CATEGORY} 
+          <MemoryDistribution
+            data={safeStats.memory?.by_category ?? DEFAULT_BY_CATEGORY}
             delay={350}
           />
-          <RecentCalls 
-            calls={recentCalls} 
+          <RecentCalls
+            calls={recentCalls}
             delay={400}
           />
         </section>
@@ -1368,16 +1368,16 @@ const fetchStats = useCallback(async () => {
               {safeStats.memory.top_accessed.map((mem, i) => (
                 <div key={i} className="memory-item">
                   <div className="memory-header">
-                    <span 
-                      className="memory-category" 
+                    <span
+                      className="memory-category"
                       style={{ background: CATEGORY_COLORS[mem.category] || COLORS.fire }}
                     >
                       {mem.category}
                     </span>
                     <span className="memory-access">{mem.access_count} accesses</span>
                     <div className="memory-importance">
-                      <div 
-                        className="importance-bar" 
+                      <div
+                        className="importance-bar"
                         style={{ width: `${mem.importance * 100}%` }}
                       />
                     </div>
@@ -1872,7 +1872,7 @@ const fetchStats = useCallback(async () => {
           z-index: 10;
           pointer-events: none;
         }
-        
+
         .flow-nodes-overlay .flow-node {
           pointer-events: auto;
         }

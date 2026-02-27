@@ -53,14 +53,27 @@ class ElasticConfig:
 
 
 @dataclass
+class ClickHouseConfig:
+    """ClickHouse connection configuration (for vector backend=clickhouse)."""
+    host: str
+    port: int
+    database: str
+    user: str
+    password: str
+    table_name: str
+    embedding_dimensions: int = 768
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     firebolt: FireboltConfig
     openai: OpenAIConfig
     ollama: OllamaConfig
     elastic: ElasticConfig
+    clickhouse: ClickHouseConfig
 
-    # Vector backend: "firebolt" or "elastic"
+    # Vector backend: "firebolt", "elastic", or "clickhouse"
     vector_backend: str = "firebolt"
 
     # Memory defaults
@@ -94,7 +107,7 @@ def load_config() -> Config:
     )
 
     vector_backend = (os.getenv("LAML_VECTOR_BACKEND", "firebolt") or "firebolt").strip().lower()
-    if vector_backend not in ("firebolt", "elastic"):
+    if vector_backend not in ("firebolt", "elastic", "clickhouse"):
         vector_backend = "firebolt"
 
     elastic = ElasticConfig(
@@ -110,11 +123,25 @@ def load_config() -> Config:
         ),
     )
 
+    clickhouse = ClickHouseConfig(
+        host=os.getenv("CLICKHOUSE_HOST", "localhost"),
+        port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
+        database=os.getenv("CLICKHOUSE_DATABASE", "laml"),
+        user=os.getenv("CLICKHOUSE_USER", "default"),
+        password=os.getenv("CLICKHOUSE_PASSWORD", ""),
+        table_name=os.getenv("CLICKHOUSE_TABLE", "long_term_memories"),
+        embedding_dimensions=int(
+            os.getenv("CLICKHOUSE_EMBEDDING_DIMENSIONS")
+            or os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")
+        ),
+    )
+
     return Config(
         firebolt=firebolt,
         openai=openai,
         ollama=ollama,
         elastic=elastic,
+        clickhouse=clickhouse,
         vector_backend=vector_backend,
     )
 

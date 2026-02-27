@@ -18,6 +18,19 @@ An intelligent, persistent memory system for LLM agents using a local vector dat
 
 ---
 
+## Automatic memory behavior (out of the box)
+
+This repo includes **`.cursorrules`** at the root so that when you open it in Cursor with the **laml** MCP server configured, the AI will **automatically**:
+
+- **Start or resume a session** at the beginning of every conversation (`init_session`)
+- **Load relevant long-term context** before answering (`recall_memories`)
+- **Update working memory** after each substantive exchange (`add_to_working_memory`) — no need to ask
+- **Promote important items to long-term memory** at milestones (`checkpoint_working_memory`, `store_memory`)
+
+You get high-value, high-impact memory behavior in **every session** (new or existing projects) as soon as you add the LAML MCP server to Cursor. No extra setup or manual prompting required.
+
+---
+
 ## Quick Start (Recommended)
 
 For the fastest setup, use the bootstrap script after cloning this fork:
@@ -191,7 +204,7 @@ python scripts/test_security.py
 
 LAML works with any MCP-compatible client. See **[Platform Setup Guide](fml/fml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
 - **Claude Code** (Anthropic)
-- **Google Gemini** / Antigravity Codes  
+- **Google Gemini** / Antigravity Codes
 - **Cursor IDE** (shown below)
 
 #### For Cursor IDE

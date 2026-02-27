@@ -27,21 +27,21 @@ def _persist_metric_to_db(metric: CallMetric) -> None:
     try:
         # Import here to avoid circular dependency
         from src.db.client import db
-        
+
         metric_id = str(uuid.uuid4())
         error_escaped = metric.error.replace("'", "''") if metric.error else None
-        
+
         query = f"""
-            INSERT INTO service_metrics 
+            INSERT INTO service_metrics
             (metric_id, service, operation, latency_ms, success, error_msg, tokens_in, tokens_out)
             VALUES (
-                '{metric_id}', 
-                '{metric.service}', 
-                '{metric.operation}', 
-                {metric.latency_ms}, 
-                {'TRUE' if metric.success else 'FALSE'}, 
+                '{metric_id}',
+                '{metric.service}',
+                '{metric.operation}',
+                {metric.latency_ms},
+                {'TRUE' if metric.success else 'FALSE'},
                 {f"'{error_escaped}'" if error_escaped else 'NULL'},
-                {metric.tokens_in or 'NULL'}, 
+                {metric.tokens_in or 'NULL'},
                 {metric.tokens_out or 'NULL'}
             )
         """
@@ -101,7 +101,7 @@ class MetricsCollector:
         # Skip recording metrics about metrics queries to avoid infinite loop
         if service == "firebolt" and operation in ("metrics_query", "other"):
             return
-            
+
         metric = CallMetric(
             timestamp=datetime.now(),
             service=service,
@@ -237,18 +237,18 @@ def log_tool_error(
     """Log an MCP tool error for review and debugging."""
     try:
         from src.db.client import db
-        
+
         error_id = str(uuid.uuid4())
-        
+
         # Escape strings for SQL
         def escape(s: Optional[str]) -> str:
             if s is None:
                 return "NULL"
             escaped = s.replace("'", "''")[:1000]  # Limit length
             return f"'{escaped}'"
-        
+
         query = f"""
-            INSERT INTO tool_error_log 
+            INSERT INTO tool_error_log
             (error_id, tool_name, user_id, error_type, error_message, input_preview, stack_trace)
             VALUES (
                 '{error_id}',

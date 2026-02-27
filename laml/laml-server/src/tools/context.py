@@ -348,13 +348,13 @@ async def _get_memories_by_type(
     limit: int = 5
 ) -> List[Dict]:
     """Get memories of a specific type with vector similarity.
-    
+
     Note: We explicitly select only needed columns to avoid Firebolt Core bug
     with NULL array columns (related_memories) that causes S3 file errors.
     """
     # Format embedding as literal for Firebolt 4.28
     emb_literal = "[" + ", ".join(str(v) for v in query_embedding) + "]::ARRAY(DOUBLE)"
-    
+
     results = db.execute(f"""
         SELECT
             memory_id, content, entities, importance,

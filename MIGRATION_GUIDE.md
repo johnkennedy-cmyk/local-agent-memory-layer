@@ -152,7 +152,7 @@ Open http://localhost:5174 - you should see your existing memories!
 - Check paths in `~/.cursor/mcp.json` match your new laptop
 - Ensure `.venv` is created and activated
 
-### "Ollama connection failed"  
+### "Ollama connection failed"
 - Run `ollama serve` in a terminal
 - Verify with `curl http://localhost:11434/api/tags`
 

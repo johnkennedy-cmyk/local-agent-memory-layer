@@ -94,7 +94,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "critical",
         "Anthropic API key detected"
     ),
-    
+
     # Bearer Tokens
     (
         "Bearer Token",
@@ -108,7 +108,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "critical",
         "Authorization header with bearer token detected"
     ),
-    
+
     # Private Keys
     (
         "Private Key",
@@ -122,7 +122,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "critical",
         "PGP private key detected"
     ),
-    
+
     # Passwords
     (
         "Password Assignment",
@@ -148,7 +148,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "high",
         "Database connection string with credentials detected"
     ),
-    
+
     # .env file patterns
     (
         "Env File Content",
@@ -162,7 +162,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "high",
         "Secret/token assignment detected"
     ),
-    
+
     # JWT Tokens
     (
         "JWT Token",
@@ -170,7 +170,7 @@ SENSITIVE_PATTERNS: List[Tuple[str, str, str, str]] = [
         "high",
         "JWT token detected"
     ),
-    
+
     # Firebolt specific
     (
         "Firebolt Client Secret",
@@ -190,44 +190,44 @@ _COMPILED_PATTERNS = [
 def detect_sensitive_content(content: str) -> List[SecurityViolation]:
     """
     Scan content for sensitive data patterns.
-    
+
     Args:
         content: The text content to scan
-        
+
     Returns:
         List of SecurityViolation objects for each detected issue
     """
     violations = []
-    
+
     for name, pattern, severity, description in _COMPILED_PATTERNS:
         matches = pattern.findall(content)
         for match in matches:
             # Redact the matched text for logging (show first/last few chars)
             if isinstance(match, tuple):
                 match = match[0]  # Handle groups
-            
+
             if len(match) > 12:
                 redacted = f"{match[:4]}...{match[-4:]}"
             else:
                 redacted = "[REDACTED]"
-            
+
             violations.append(SecurityViolation(
                 pattern_name=name,
                 matched_text=redacted,
                 severity=severity,
                 description=description
             ))
-    
+
     return violations
 
 
 def validate_content_for_storage(content: str) -> Tuple[bool, Optional[str], List[SecurityViolation]]:
     """
     Validate content before storing in memory.
-    
+
     Args:
         content: The content to validate
-        
+
     Returns:
         Tuple of (is_safe, error_message, violations)
         - is_safe: True if content can be stored
@@ -235,14 +235,14 @@ def validate_content_for_storage(content: str) -> Tuple[bool, Optional[str], Lis
         - violations: List of detected violations
     """
     violations = detect_sensitive_content(content)
-    
+
     if not violations:
         return True, None, []
-    
+
     # Check for critical violations (always block)
     critical = [v for v in violations if v.severity == "critical"]
     high = [v for v in violations if v.severity == "high"]
-    
+
     if critical:
         error_msg = (
             f"SECURITY BLOCK: Content contains {len(critical)} critical security violation(s). "
@@ -250,7 +250,7 @@ def validate_content_for_storage(content: str) -> Tuple[bool, Optional[str], Lis
             "Sensitive data like API keys, tokens, and private keys cannot be stored in memory."
         )
         return False, error_msg, violations
-    
+
     if high:
         error_msg = (
             f"SECURITY WARNING: Content contains {len(high)} high-severity security issue(s). "
@@ -258,7 +258,7 @@ def validate_content_for_storage(content: str) -> Tuple[bool, Optional[str], Lis
             "This content appears to contain credentials or secrets and has been blocked."
         )
         return False, error_msg, violations
-    
+
     # Medium severity - allow but warn (could be false positives)
     return True, None, violations
 
@@ -266,22 +266,22 @@ def validate_content_for_storage(content: str) -> Tuple[bool, Optional[str], Lis
 def redact_sensitive_content(content: str) -> str:
     """
     Redact sensitive patterns from content.
-    
+
     This can be used as an alternative to blocking - replace
     sensitive data with [REDACTED] markers.
-    
+
     Args:
         content: The content to redact
-        
+
     Returns:
         Content with sensitive patterns replaced
     """
     redacted = content
-    
+
     for name, pattern, severity, _ in _COMPILED_PATTERNS:
         if severity in ("critical", "high"):
             redacted = pattern.sub(f"[REDACTED-{name.upper().replace(' ', '-')}]", redacted)
-    
+
     return redacted
 
 
@@ -303,6 +303,6 @@ def looks_like_password(text: str) -> bool:
     # Common password field patterns
     if re.match(r"(?i)^(password|passwd|pwd|secret|token)$", text):
         return False  # These are field names, not values
-    
+
     # Check for password-like assignments
     return bool(re.search(r"(?i)password\s*[=:]\s*\S+", text))

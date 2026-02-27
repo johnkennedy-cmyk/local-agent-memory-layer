@@ -1,0 +1,30 @@
+# ClickHouse for LAML (vector backend=clickhouse)
+#
+# Run: docker compose -f docker-compose.clickhouse.yml up -d
+# Then set LAML_VECTOR_BACKEND=clickhouse and CLICKHOUSE_* in .env
+# Create table: python scripts/init_clickhouse.py
+#
+# Cursor: add the ClickHouse MCP server to ~/.cursor/mcp.json (see config/cursor-mcp-clickhouse.json.template)
+
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: clickhouse-laml
+    environment:
+      - CLICKHOUSE_DB=laml
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

@@ -100,7 +100,7 @@ Key Tools:
 2. DURING CONVERSATION:
    - Add important context: add_to_working_memory(session_id, content, content_type="task_state")
    - For complex tasks: get_relevant_context(session_id, user_id, query, token_budget=4000)
-   
+
 3. AUTOMATIC MEMORY EXTRACTION:
    After each response, silently store learnings:
    - Bug fixes → procedural.workflow (importance: 0.9)
@@ -206,7 +206,7 @@ def seed_core_memories(user_id: str = "system"):
         # Check if similar memory already exists (by summary)
         summary_check = mem["summary"].replace("'", "''")
         existing = db.execute(f"""
-            SELECT memory_id FROM long_term_memories 
+            SELECT memory_id FROM long_term_memories
             WHERE user_id = '{user_id}' AND summary = '{summary_check}' AND deleted_at IS NULL
             LIMIT 1
         """)
@@ -222,32 +222,32 @@ def seed_core_memories(user_id: str = "system"):
 
         # Insert memory
         memory_id = str(uuid.uuid4())
-        
+
         # Format entities array for SQL
         entities_list = mem.get("entities", [])
-        
+
         # Note: Content may contain '?' characters (e.g., in URLs)
         # The db.execute uses '?' as parameter placeholders, so we need
         # to ensure content doesn't interfere. The escaping in client.py
         # handles this by replacing params left-to-right, so as long as
         # parameters are in correct order, embedded '?' in string values
         # that have already been substituted won't be affected.
-        
+
         # Use a direct SQL approach to avoid parameter substitution issues
         # with complex content containing '?' characters
         content_escaped = mem["content"].replace("'", "''")
         summary_escaped = mem["summary"].replace("'", "''")
-        
+
         # Format embedding array
         embedding_str = "[" + ", ".join(str(x) for x in embedding) + "]"
-        
+
         # Format entities array
         if entities_list:
             entities_escaped = [str(x).replace("'", "''") for x in entities_list]
             entities_str = "ARRAY[" + ", ".join(f"'{x}'" for x in entities_escaped) + "]"
         else:
             entities_str = "ARRAY[]::ARRAY(TEXT)"
-        
+
         sql = f"""
             INSERT INTO long_term_memories (
                 memory_id, user_id, memory_category, memory_subtype,

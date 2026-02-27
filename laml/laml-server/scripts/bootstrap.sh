@@ -67,14 +67,14 @@ echo ""
 echo "🦙 Checking Ollama..."
 if curl -s "http://localhost:11434/api/tags" > /dev/null 2>&1; then
     echo -e "  ${GREEN}✓${NC} Ollama is running on port 11434"
-    
+
     # Check for required models
     if curl -s "http://localhost:11434/api/tags" | grep -q "llama3"; then
         echo -e "  ${GREEN}✓${NC} llama3 model available"
     else
         echo -e "  ${YELLOW}!${NC} llama3 model not found - run: ollama pull llama3:8b"
     fi
-    
+
     if curl -s "http://localhost:11434/api/tags" | grep -q "nomic-embed-text"; then
         echo -e "  ${GREEN}✓${NC} nomic-embed-text model available"
     else

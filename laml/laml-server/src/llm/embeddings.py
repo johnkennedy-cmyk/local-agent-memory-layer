@@ -29,7 +29,7 @@ class EmbeddingService:
         self.dimensions = config.ollama.embedding_dimensions
 
         # Fallback to OpenAI if configured
-        if config.openai.api_key and config.openai.api_key != "your-openai-api-key-here":
+        if config.openai.api_key and config.openai.api_key != "your-openai-api-key-here":  # pragma: allowlist secret
             try:
                 from openai import OpenAI
                 self.openai_client = OpenAI(api_key=config.openai.api_key)

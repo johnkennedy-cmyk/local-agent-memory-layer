@@ -1,0 +1,29 @@
+{
+  "_comment": "Merge the 'clickhouse' block below into your existing mcpServers in ~/.cursor/mcp.json. Requires Docker; no uv needed.",
+  "mcpServers": {
+    "clickhouse": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--add-host=host.docker.internal:host-gateway",
+        "-e", "CLICKHOUSE_HOST",
+        "-e", "CLICKHOUSE_PORT",
+        "-e", "CLICKHOUSE_USER",
+        "-e", "CLICKHOUSE_PASSWORD",
+        "-e", "CLICKHOUSE_SECURE",
+        "-e", "CLICKHOUSE_VERIFY",
+        "mcp/clickhouse"
+      ],
+      "env": {
+        "CLICKHOUSE_HOST": "host.docker.internal",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_USER": "default",
+        "CLICKHOUSE_PASSWORD": "",
+        "CLICKHOUSE_SECURE": "false",
+        "CLICKHOUSE_VERIFY": "false"
+      }
+    }
+  }
+}

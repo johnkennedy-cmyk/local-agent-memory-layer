@@ -36,7 +36,7 @@ cat > "$BACKUP_DIR/README.txt" << 'EOF'
 FML Configuration Backup
 ========================
 
-This backup contains sensitive configuration files for the 
+This backup contains sensitive configuration files for the
 Firebolt Memory Layer (FML) project.
 
 Files included:

@@ -20,11 +20,11 @@ from src.db.client import db
 
 def rebuild_with_index():
     """Rebuild the long_term_memories table with proper vector index."""
-    
+
     print("=" * 60)
     print("LAML - Rebuild Vector Table")
     print("=" * 60)
-    
+
     # Step 1: Check current state
     print("\n[1/6] Checking current state...")
     try:
@@ -34,7 +34,7 @@ def rebuild_with_index():
     except Exception as e:
         print(f"       Table may not exist: {e}")
         row_count = 0
-    
+
     # Step 2: Backup existing data
     if row_count > 0:
         print("\n[2/6] Backing up existing memories...")
@@ -50,7 +50,7 @@ def rebuild_with_index():
             return False
     else:
         print("\n[2/6] No data to backup, skipping...")
-    
+
     # Step 3: Drop existing table
     print("\n[3/6] Dropping existing table...")
     try:
@@ -59,7 +59,7 @@ def rebuild_with_index():
     except Exception as e:
         print(f"       ✗ Drop failed: {e}")
         return False
-    
+
     # Step 4: Create fresh table
     print("\n[4/6] Creating fresh table...")
     # NOTE: related_memories column removed - use memory_relationships table instead
@@ -97,7 +97,7 @@ def rebuild_with_index():
     except Exception as e:
         print(f"       ✗ Create failed: {e}")
         return False
-    
+
     # Step 5: Create HNSW index on EMPTY table (critical!)
     print("\n[5/6] Creating HNSW vector index on empty table...")
     create_index_sql = """
@@ -116,21 +116,21 @@ def rebuild_with_index():
     except Exception as e:
         print(f"       ✗ Index creation failed: {e}")
         return False
-    
+
     # Step 6: Restore data
     if row_count > 0:
         print("\n[6/6] Restoring memories from backup...")
         try:
             db.execute("""
-                INSERT INTO long_term_memories 
+                INSERT INTO long_term_memories
                 SELECT * FROM long_term_memories_backup
             """)
-            
+
             # Verify restoration
             result = db.execute("SELECT COUNT(*) as cnt FROM long_term_memories")
             restored = result[0]['cnt'] if result else 0
             print(f"       ✓ Restored {restored} memories")
-            
+
             # Clean up backup
             db.execute("DROP TABLE IF EXISTS long_term_memories_backup")
             print("       ✓ Cleaned up backup table")
@@ -140,7 +140,7 @@ def rebuild_with_index():
             return False
     else:
         print("\n[6/6] No data to restore, table ready for use")
-    
+
     print("\n" + "=" * 60)
     print("✓ Vector table rebuilt successfully!")
     print("=" * 60)

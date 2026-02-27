@@ -49,4 +49,3 @@ class VectorStoreFactory(Protocol):
 
     def create(self) -> VectorStore:  # pragma: no cover - simple protocol
         ...
-

@@ -4,38 +4,38 @@
   --bg-secondary: #FFF2F3;
   --bg-card: #F5EBEB;
   --bg-card-hover: #FFFCF9;
-  
+
   /* Primary Firebolt Red */
   --accent-fire: #F72A30;
   --accent-fire-glow: rgba(247, 42, 48, 0.15);
   --accent-fire-dark: #AC2422;
   --accent-fire-light: #FF4848;
-  
+
   /* Secondary accents */
   --accent-cyan: #F72A30;
   --accent-cyan-glow: rgba(247, 42, 48, 0.1);
   --accent-purple: #AC2422;
   --accent-green: #FF4848;
   --accent-yellow: #FFF2F3;
-  
+
   /* Text colors - dark on light */
   --text-primary: #1A0404;
   --text-secondary: #665555;
   --text-muted: #998A85;
-  
+
   /* Borders */
   --border-subtle: rgba(26, 4, 4, 0.1);
   --border-accent: rgba(247, 42, 48, 0.4);
-  
+
   /* Firebolt Typography */
   --font-display: 'Poppins', sans-serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'Roboto Mono', monospace;
-  
+
   /* Effects - softer for light mode */
   --shadow-glow: 0 0 20px rgba(247, 42, 48, 0.1);
   --shadow-card: 0 4px 16px rgba(26, 4, 4, 0.08);
-  
+
   /* Firebolt-specific surface colors */
   --surface-light: #F5EBEB;
   --surface-lighter: #FFF2F3;
@@ -68,7 +68,7 @@ body::before {
   left: 0;
   right: 0;
   bottom: 0;
-  background: 
+  background:
     radial-gradient(ellipse at 20% 20%, rgba(247, 42, 48, 0.03) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(245, 235, 235, 0.5) 0%, transparent 50%),
     radial-gradient(ellipse at 50% 50%, rgba(255, 242, 243, 0.3) 0%, transparent 60%);
@@ -106,13 +106,13 @@ body::before {
 }
 
 @keyframes slide-up {
-  from { 
-    opacity: 0; 
-    transform: translateY(20px); 
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
-  to { 
-    opacity: 1; 
-    transform: translateY(0); 
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
