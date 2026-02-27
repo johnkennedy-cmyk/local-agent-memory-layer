@@ -9,8 +9,8 @@ from mcp.server.fastmcp import FastMCP
 from src.db.client import db
 from src.llm.embeddings import embedding_service
 from src.llm.ollama import ollama_service
+from src.memory.backend import get_memory_repository, get_vector_store
 from src.memory.taxonomy import validate_subtype
-from src.memory.firebolt_vector_store import FireboltVectorStore
 from src.metrics import log_tool_error
 from src.security import validate_content_for_storage, SecurityViolation
 
@@ -159,21 +159,22 @@ def register_longterm_memory_tools(mcp: FastMCP):
 
         # Check for similar existing memories to avoid duplicates
         similar = await _find_similar_memories(user_id, embedding, threshold=0.95)
+        repo = get_memory_repository()
 
         if similar:
             # Very similar memory exists - update it instead
             existing_id = similar[0]["memory_id"]
-            db.execute("""
-                UPDATE long_term_memories
-                SET content = ?,
-                    summary = ?,
-                    embedding = ?,
-                    importance = GREATEST(importance, ?),
-                    access_count = access_count + 1,
-                    updated_at = CURRENT_TIMESTAMP(),
-                    last_accessed = CURRENT_TIMESTAMP()
-                WHERE memory_id = ?
-            """, (content, summary, embedding, importance, existing_id))
+            repo.update(
+                existing_id,
+                user_id,
+                {
+                    "content": content,
+                    "summary": summary,
+                    "embedding": embedding,
+                    "importance": importance,
+                },
+            )
+            repo.increment_access_count(existing_id)
 
             return json.dumps({
                 "memory_id": existing_id,
@@ -187,18 +188,23 @@ def register_longterm_memory_tools(mcp: FastMCP):
             })
 
         # Insert new memory
-        db.execute("""
-            INSERT INTO long_term_memories (
-                memory_id, user_id, memory_category, memory_subtype,
-                content, summary, embedding, entities, importance,
-                event_time, metadata, is_temporal, source_session, source_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            memory_id, user_id, memory_category, memory_subtype,
-            content, summary, embedding, entity_list, importance,
-            event_time, metadata, event_time is not None,
-            source_session, "conversation"
-        ))
+        doc = {
+            "memory_id": memory_id,
+            "user_id": user_id,
+            "memory_category": memory_category,
+            "memory_subtype": memory_subtype,
+            "content": content,
+            "summary": summary,
+            "embedding": embedding,
+            "entities": entity_list,
+            "importance": importance,
+            "event_time": event_time,
+            "metadata": metadata,
+            "is_temporal": event_time is not None,
+            "source_session": source_session,
+            "source_type": "conversation",
+        }
+        repo.insert(doc)
 
         return json.dumps({
             "memory_id": memory_id,
@@ -241,18 +247,12 @@ def register_longterm_memory_tools(mcp: FastMCP):
         """
         # Generate query embedding
         query_embedding = embedding_service.generate(query)
-
-        # Build filter conditions and delegate vector search to the configured store
-        vector_store = FireboltVectorStore()
-
+        vector_store = get_vector_store()
+        repo = get_memory_repository()
         filters = {"user_id": user_id}
 
-        # Check if table has any data first (vector_search fails on empty tables)
-        count_result = db.execute(
-            "SELECT COUNT(*) FROM long_term_memories WHERE user_id = ? AND deleted_at IS NULL",
-            (user_id,),
-        )
-        if not count_result or count_result[0][0] == 0:
+        # Check if user has any memories (vector search fails on empty in some backends)
+        if repo.count_for_user(user_id) == 0:
             return json.dumps({
                 "memories": [],
                 "total_returned": 0,
@@ -268,7 +268,6 @@ def register_longterm_memory_tools(mcp: FastMCP):
             filters=filters,
         )
 
-        # Fetch full rows for returned IDs and apply filters
         if not search_results:
             return json.dumps({
                 "memories": [],
@@ -278,27 +277,7 @@ def register_longterm_memory_tools(mcp: FastMCP):
             })
 
         ids = [res.memory_id for res in search_results]
-        placeholders = ",".join(["?"] * len(ids))
-
-        rows = db.execute(
-            f"""
-            SELECT
-                memory_id,
-                content,
-                summary,
-                memory_category,
-                memory_subtype,
-                entities,
-                importance,
-                access_count,
-                created_at,
-                metadata
-            FROM long_term_memories
-            WHERE memory_id IN ({placeholders})
-              AND deleted_at IS NULL
-            """,
-            tuple(ids),
-        )
+        rows = repo.get_many_by_ids(ids, user_id=user_id)
 
         # Filter by similarity threshold and entity matching
         entity_filter = []
@@ -310,14 +289,13 @@ def register_longterm_memory_tools(mcp: FastMCP):
 
         memories = []
         for row in rows:
-            # Indices: 0=memory_id, 1=content, 2=summary, 3=category, 4=subtype,
-            #          5=entities, 6=importance, 7=access_count, 8=created_at, 9=metadata
-            similarity = similarity_by_id.get(row[0], 0.0)
+            mid = row["memory_id"]
+            similarity = similarity_by_id.get(mid, 0.0)
 
             if similarity < min_similarity:
                 continue
 
-            memory_entities = row[5] if row[5] else []
+            memory_entities = row.get("entities") or []
 
             # Entity boost: increase effective similarity for entity matches
             entity_boost = 1.0
@@ -329,16 +307,16 @@ def register_longterm_memory_tools(mcp: FastMCP):
             effective_similarity = min(1.0, similarity * entity_boost)
 
             memories.append({
-                "memory_id": row[0],
-                "content": row[1],
-                "summary": row[2],
-                "memory_category": row[3],
-                "memory_subtype": row[4],
+                "memory_id": mid,
+                "content": row["content"],
+                "summary": row.get("summary"),
+                "memory_category": row["memory_category"],
+                "memory_subtype": row["memory_subtype"],
                 "entities": memory_entities,
-                "importance": row[6],
-                "access_count": row[7],
-                "created_at": str(row[8]) if row[8] else None,
-                "metadata": row[9],
+                "importance": row.get("importance"),
+                "access_count": row.get("access_count"),
+                "created_at": str(row["created_at"]) if row.get("created_at") else None,
+                "metadata": row.get("metadata"),
                 "similarity": round(similarity, 4),
                 "effective_similarity": round(effective_similarity, 4)
             })
@@ -352,12 +330,7 @@ def register_longterm_memory_tools(mcp: FastMCP):
         # Update access counts for returned memories
         if memories:
             for mem in memories:
-                db.execute("""
-                    UPDATE long_term_memories
-                    SET access_count = access_count + 1,
-                        last_accessed = CURRENT_TIMESTAMP()
-                    WHERE memory_id = ?
-                """, (mem["memory_id"],))
+                repo.increment_access_count(mem["memory_id"])
 
         # Build retrieval breakdown
         breakdown = {
@@ -378,33 +351,31 @@ def register_longterm_memory_tools(mcp: FastMCP):
         # Include related memories if requested (chunking)
         if include_related and memories:
             seen_ids = {m["memory_id"] for m in memories}
-            
             for mem in memories:
-                related = db.execute("""
-                    SELECT 
-                        r.target_id, r.relationship, r.strength,
-                        m.content, m.memory_category, m.memory_subtype
-                    FROM memory_relationships r
-                    JOIN long_term_memories m ON r.target_id = m.memory_id
-                    WHERE r.source_id = ? AND r.user_id = ?
-                      AND m.deleted_at IS NULL
-                    ORDER BY r.strength DESC
-                    LIMIT 3
-                """, (mem["memory_id"], user_id))
-                
+                rel_rows = db.execute(
+                    "SELECT r.target_id, r.relationship, r.strength FROM memory_relationships r WHERE r.source_id = ? AND r.user_id = ? ORDER BY r.strength DESC LIMIT 3",
+                    (mem["memory_id"], user_id),
+                )
+                if not rel_rows:
+                    mem["related_memories"] = []
+                    continue
+                target_ids = [row[0] for row in rel_rows]
+                target_docs = {m["memory_id"]: m for m in repo.get_many_by_ids(target_ids, user_id=user_id)}
                 related_memories = []
-                for row in related:
-                    if row[0] not in seen_ids:  # Avoid duplicates
+                for row in rel_rows:
+                    if row[0] not in seen_ids:
+                        t = target_docs.get(row[0])
+                        if not t:
+                            continue
                         related_memories.append({
                             "memory_id": row[0],
                             "relationship": row[1],
                             "strength": row[2],
-                            "content": row[3],
-                            "memory_category": row[4],
-                            "memory_subtype": row[5]
+                            "content": t.get("content"),
+                            "memory_category": t.get("memory_category"),
+                            "memory_subtype": t.get("memory_subtype"),
                         })
                         seen_ids.add(row[0])
-                
                 mem["related_memories"] = related_memories
             
             breakdown["related_memories_included"] = sum(
@@ -442,19 +413,16 @@ def register_longterm_memory_tools(mcp: FastMCP):
             JSON with success status
         """
         # Verify ownership
-        existing = db.execute(
-            "SELECT user_id FROM long_term_memories WHERE memory_id = ? AND deleted_at IS NULL",
-            (memory_id,)
-        )
+        repo = get_memory_repository()
+        existing = repo.get_by_id(memory_id, user_id=user_id)
 
         if not existing:
             return json.dumps({"error": f"Memory not found: {memory_id}"})
 
-        if existing[0][0] != user_id:
+        if existing.get("user_id") != user_id:
             return json.dumps({"error": "Unauthorized: memory belongs to different user"})
 
-        updates = []
-        params = []
+        fields = {}
         re_embedded = False
 
         if content is not None:
@@ -475,38 +443,24 @@ def register_longterm_memory_tools(mcp: FastMCP):
                     "hint": "Sensitive data like API keys, passwords, and tokens should not be stored in memory."
                 })
 
-            updates.append("content = ?")
-            params.append(content)
-            # Regenerate embedding
+            fields["content"] = content
             embedding = embedding_service.generate(content)
-            updates.append("embedding = ?")
-            params.append(embedding)
+            fields["embedding"] = embedding
             re_embedded = True
 
         if importance is not None:
-            updates.append("importance = ?")
-            params.append(importance)
+            fields["importance"] = importance
 
         if entities is not None:
-            entity_list = [e.strip() for e in entities.split(",") if e.strip()]
-            updates.append("entities = ?")
-            params.append(entity_list)
+            fields["entities"] = [e.strip() for e in entities.split(",") if e.strip()]
 
         if metadata is not None:
-            updates.append("metadata = ?")
-            params.append(metadata)
+            fields["metadata"] = metadata
 
-        if not updates:
+        if not fields:
             return json.dumps({"error": "No updates provided"})
 
-        updates.append("updated_at = CURRENT_TIMESTAMP()")
-        params.extend([memory_id, user_id])
-
-        db.execute(f"""
-            UPDATE long_term_memories
-            SET {", ".join(updates)}
-            WHERE memory_id = ? AND user_id = ?
-        """, tuple(params))
+        repo.update(memory_id, user_id, fields)
 
         return json.dumps({
             "success": True,
@@ -532,28 +486,19 @@ def register_longterm_memory_tools(mcp: FastMCP):
             JSON with success status
         """
         # Verify ownership
-        existing = db.execute(
-            "SELECT user_id FROM long_term_memories WHERE memory_id = ?",
-            (memory_id,)
-        )
+        repo = get_memory_repository()
+        existing = repo.get_by_id(memory_id, include_deleted=True)
 
         if not existing:
             return json.dumps({"error": f"Memory not found: {memory_id}"})
 
-        if existing[0][0] != user_id:
+        if existing.get("user_id") != user_id:
             return json.dumps({"error": "Unauthorized: memory belongs to different user"})
 
         if hard_delete:
-            db.execute(
-                "DELETE FROM long_term_memories WHERE memory_id = ? AND user_id = ?",
-                (memory_id, user_id)
-            )
+            repo.hard_delete(memory_id, user_id)
         else:
-            db.execute("""
-                UPDATE long_term_memories
-                SET deleted_at = CURRENT_TIMESTAMP()
-                WHERE memory_id = ? AND user_id = ?
-            """, (memory_id, user_id))
+            repo.soft_delete(memory_id, user_id)
 
         return json.dumps({
             "success": True,
@@ -581,25 +526,21 @@ def register_longterm_memory_tools(mcp: FastMCP):
                 "error": "Confirmation required. Set confirmation to 'CONFIRM_DELETE_ALL'"
             })
 
-        # Count memories
-        count_result = db.execute(
-            "SELECT COUNT(*) FROM long_term_memories WHERE user_id = ?",
-            (user_id,)
-        )
-        memory_count = count_result[0][0] if count_result else 0
+        # Count memories and sessions
+        repo = get_memory_repository()
+        memory_count = repo.count_for_user(user_id, include_deleted=True)
 
-        # Count sessions
         session_result = db.execute(
             "SELECT COUNT(*) FROM session_contexts WHERE user_id = ?",
             (user_id,)
         )
         session_count = session_result[0][0] if session_result else 0
 
-        # Delete all user data (including relationships)
+        # Delete all user data (relationships and other tables in Firebolt; long-term memory via repo)
         db.execute("DELETE FROM memory_access_log WHERE user_id = ?", (user_id,))
         db.execute("DELETE FROM memory_relationships WHERE user_id = ?", (user_id,))
         db.execute("DELETE FROM working_memory_items WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM long_term_memories WHERE user_id = ?", (user_id,))
+        repo.delete_all_for_user(user_id)
         db.execute("DELETE FROM session_contexts WHERE user_id = ?", (user_id,))
 
         return json.dumps({
@@ -648,18 +589,13 @@ def register_longterm_memory_tools(mcp: FastMCP):
             JSON with relationship details
         """
         # Verify both memories exist and belong to user
-        source = db.execute(
-            "SELECT memory_id, content FROM long_term_memories WHERE memory_id = ? AND user_id = ? AND deleted_at IS NULL",
-            (source_id, user_id)
-        )
-        target = db.execute(
-            "SELECT memory_id, content FROM long_term_memories WHERE memory_id = ? AND user_id = ? AND deleted_at IS NULL",
-            (target_id, user_id)
-        )
-
-        if not source:
+        repo = get_memory_repository()
+        docs = repo.get_many_by_ids([source_id, target_id], user_id=user_id)
+        source_doc = next((d for d in docs if d["memory_id"] == source_id), None)
+        target_doc = next((d for d in docs if d["memory_id"] == target_id), None)
+        if not source_doc:
             return json.dumps({"error": f"Source memory not found: {source_id}"})
-        if not target:
+        if not target_doc:
             return json.dumps({"error": f"Target memory not found: {target_id}"})
 
         # Validate relationship type
@@ -793,13 +729,11 @@ def register_longterm_memory_tools(mcp: FastMCP):
             JSON with related memories and relationship details
         """
         # Verify memory exists
-        memory = db.execute(
-            "SELECT memory_id, content, memory_category FROM long_term_memories WHERE memory_id = ? AND user_id = ? AND deleted_at IS NULL",
-            (memory_id, user_id)
-        )
-
-        if not memory:
+        repo = get_memory_repository()
+        memory_docs = repo.get_many_by_ids([memory_id], user_id=user_id)
+        if not memory_docs:
             return json.dumps({"error": f"Memory not found: {memory_id}"})
+        memory_doc = memory_docs[0]
 
         # Build query for outgoing relationships
         conditions = ["r.source_id = ?", "r.user_id = ?"]
@@ -813,32 +747,30 @@ def register_longterm_memory_tools(mcp: FastMCP):
 
         where_clause = " AND ".join(conditions)
 
-        # Get outgoing relationships (this memory -> others)
-        outgoing = db.execute(f"""
-            SELECT 
-                r.target_id, r.relationship, r.strength, r.context,
-                m.content, m.memory_category, m.memory_subtype, m.importance
-            FROM memory_relationships r
-            JOIN long_term_memories m ON r.target_id = m.memory_id
-            WHERE {where_clause}
-              AND m.deleted_at IS NULL
-            ORDER BY r.strength DESC
-            LIMIT ?
-        """, (*params, limit))
-
+        # Get outgoing relationships (this memory -> others); memory content from repo
+        outgoing = db.execute(
+            f"SELECT r.target_id, r.relationship, r.strength, r.context FROM memory_relationships r WHERE {where_clause} ORDER BY r.strength DESC LIMIT ?",
+            (*params, limit),
+        )
         related = []
-        for row in outgoing:
-            related.append({
-                "memory_id": row[0],
-                "relationship": row[1],
-                "direction": "outgoing",
-                "strength": row[2],
-                "context": row[3],
-                "content": row[4],
-                "memory_category": row[5],
-                "memory_subtype": row[6],
-                "importance": row[7]
-            })
+        if outgoing:
+            out_ids = [row[0] for row in outgoing]
+            out_mems = {m["memory_id"]: m for m in repo.get_many_by_ids(out_ids, user_id=user_id)}
+            for row in outgoing:
+                m = out_mems.get(row[0])
+                if not m:
+                    continue
+                related.append({
+                    "memory_id": row[0],
+                    "relationship": row[1],
+                    "direction": "outgoing",
+                    "strength": row[2],
+                    "context": row[3],
+                    "content": m.get("content"),
+                    "memory_category": m.get("memory_category"),
+                    "memory_subtype": m.get("memory_subtype"),
+                    "importance": m.get("importance"),
+                })
 
         # Get incoming relationships (others -> this memory)
         if include_reverse:
@@ -846,41 +778,40 @@ def register_longterm_memory_tools(mcp: FastMCP):
             params[0] = memory_id
             where_clause = " AND ".join(conditions)
 
-            incoming = db.execute(f"""
-                SELECT 
-                    r.source_id, r.relationship, r.strength, r.context,
-                    m.content, m.memory_category, m.memory_subtype, m.importance
-                FROM memory_relationships r
-                JOIN long_term_memories m ON r.source_id = m.memory_id
-                WHERE {where_clause}
-                  AND m.deleted_at IS NULL
-                ORDER BY r.strength DESC
-                LIMIT ?
-            """, (*params, limit))
-
-            for row in incoming:
-                # Avoid duplicates from bidirectional links
-                if not any(r["memory_id"] == row[0] for r in related):
+            incoming = db.execute(
+                f"SELECT r.source_id, r.relationship, r.strength, r.context FROM memory_relationships r WHERE {where_clause} ORDER BY r.strength DESC LIMIT ?",
+                (*params, limit),
+            )
+            if incoming:
+                in_ids = [row[0] for row in incoming]
+                in_mems = {m["memory_id"]: m for m in repo.get_many_by_ids(in_ids, user_id=user_id)}
+                for row in incoming:
+                    if any(r["memory_id"] == row[0] for r in related):
+                        continue
+                    m = in_mems.get(row[0])
+                    if not m:
+                        continue
                     related.append({
                         "memory_id": row[0],
                         "relationship": row[1],
                         "direction": "incoming",
                         "strength": row[2],
                         "context": row[3],
-                        "content": row[4],
-                        "memory_category": row[5],
-                        "memory_subtype": row[6],
-                        "importance": row[7]
+                        "content": m.get("content"),
+                        "memory_category": m.get("memory_category"),
+                        "memory_subtype": m.get("memory_subtype"),
+                        "importance": m.get("importance"),
                     })
 
         # Sort by strength and limit
         related.sort(key=lambda x: x["strength"], reverse=True)
         related = related[:limit]
 
+        content = memory_doc.get("content") or ""
         return json.dumps({
             "memory_id": memory_id,
-            "memory_content": memory[0][1][:100] + "..." if len(memory[0][1]) > 100 else memory[0][1],
-            "memory_category": memory[0][2],
+            "memory_content": content[:100] + "..." if len(content) > 100 else content,
+            "memory_category": memory_doc.get("memory_category"),
             "related_count": len(related),
             "related_memories": related
         })
@@ -909,45 +840,38 @@ def register_longterm_memory_tools(mcp: FastMCP):
             JSON with created links
         """
         # Get the memory and its content for re-embedding
-        memory = db.execute(
-            "SELECT memory_id, content, memory_category FROM long_term_memories WHERE memory_id = ? AND user_id = ? AND deleted_at IS NULL",
-            (memory_id, user_id)
-        )
-
-        if not memory:
+        repo = get_memory_repository()
+        vector_store = get_vector_store()
+        memory_docs = repo.get_many_by_ids([memory_id], user_id=user_id)
+        if not memory_docs:
             return json.dumps({"error": f"Memory not found: {memory_id}"})
+        content = memory_docs[0]["content"]
+        category = memory_docs[0]["memory_category"]
 
-        content = memory[0][1]
-        category = memory[0][2]
-        
-        # Generate fresh embedding (DB returns string format, so regenerate)
         embedding = embedding_service.generate(content)
-        embedding_literal = _format_embedding_literal(embedding)
+        # Vector search for similar memories; filter by category in post-filter
+        search_results = vector_store.search(
+            query_embedding=embedding,
+            top_k=max_links * 2,
+            filters={"user_id": user_id},
+        )
+        # Get full docs to filter by category and get content
+        similar_ids = [r.memory_id for r in search_results if r.memory_id != memory_id]
+        similar_docs = repo.get_many_by_ids(similar_ids, user_id=user_id)
+        similar_by_id = {m["memory_id"]: m for m in similar_docs}
+        score_by_id = {r.memory_id: r.score for r in search_results}
 
-        # Find similar memories (same category for better relevance)
-        similar = db.execute(f"""
-            SELECT 
-                memory_id, content,
-                VECTOR_COSINE_SIMILARITY(embedding, {embedding_literal}) AS similarity
-            FROM long_term_memories
-            WHERE user_id = ?
-              AND memory_id != ?
-              AND memory_category = ?
-              AND deleted_at IS NULL
-            ORDER BY similarity DESC
-            LIMIT ?
-        """, (user_id, memory_id, category, max_links * 2))
-
-        # Create links for memories above threshold
+        # Create links for memories above threshold (same category, score >= threshold)
         links_created = []
-        for row in similar:
-            sim_id, sim_content, similarity = row
-            
-            if similarity is None or similarity < similarity_threshold:
-                continue
-
+        for sim_id in similar_ids:
             if len(links_created) >= max_links:
                 break
+            m = similar_by_id.get(sim_id)
+            if not m or m.get("memory_category") != category:
+                continue
+            similarity = score_by_id.get(sim_id) or 0.0
+            if similarity < similarity_threshold:
+                continue
 
             # Check if link already exists
             existing = db.execute("""
@@ -956,6 +880,7 @@ def register_longterm_memory_tools(mcp: FastMCP):
             """, (memory_id, sim_id, user_id))
 
             if not existing:
+                sim_content = m.get("content") or ""
                 rel_id = str(uuid.uuid4())
                 db.execute("""
                     INSERT INTO memory_relationships (
@@ -1007,45 +932,35 @@ async def _find_similar_memories(
     embedding: List[float],
     threshold: float = 0.95
 ) -> List[dict]:
-    """Find memories with very high similarity (for deduplication).
-    
-    Uses vector_search() TVF with HNSW index for fast approximate nearest neighbor search.
-    """
-    # Format embedding as literal (required for Firebolt 4.28 - no parameterized vectors)
-    embedding_literal = _format_embedding_literal(embedding)
-    
-    # Check if table has any data first (vector_search fails on empty tables)
-    count_result = db.execute("SELECT COUNT(*) FROM long_term_memories WHERE user_id = ? AND deleted_at IS NULL", (user_id,))
-    if not count_result or count_result[0][0] == 0:
+    """Find memories with very high similarity (for deduplication). Uses configured vector store."""
+    repo = get_memory_repository()
+    vector_store = get_vector_store()
+    if repo.count_for_user(user_id) == 0:
         return []
-    
-    # Use vector_search TVF with the HNSW index (positional params for v4.28)
-    # TVF returns rows directly from the table (filtered by ANN search)
-    query = f"""
-        SELECT
-            memory_id,
-            content,
-            VECTOR_COSINE_SIMILARITY(embedding, {embedding_literal}) AS similarity
-        FROM vector_search(
-            INDEX idx_memories_embedding,
-            {embedding_literal},
-            10,
-            64
-        )
-        WHERE user_id = ? AND deleted_at IS NULL
-        ORDER BY similarity DESC
-        LIMIT 3
-    """
-    
-    results = db.execute(query, (user_id,))
 
+    search_results = vector_store.search(
+        query_embedding=embedding,
+        top_k=10,
+        filters={"user_id": user_id},
+    )
+    if not search_results:
+        return []
+
+    ids = [r.memory_id for r in search_results]
+    docs = repo.get_many_by_ids(ids, user_id=user_id)
+    by_id = {m["memory_id"]: m for m in docs}
     similar = []
-    for row in results:
-        if row[2] and row[2] >= threshold:
+    for r in search_results:
+        if r.score >= threshold:
+            m = by_id.get(r.memory_id)
+            content = (m.get("content") or "")[:100]
+            if len(m.get("content") or "") > 100:
+                content += "..."
             similar.append({
-                "memory_id": row[0],
-                "content": row[1][:100] + "..." if len(row[1]) > 100 else row[1],
-                "similarity": round(row[2], 4)
+                "memory_id": r.memory_id,
+                "content": content,
+                "similarity": round(r.score, 4),
             })
-
+        if len(similar) >= 3:
+            break
     return similar

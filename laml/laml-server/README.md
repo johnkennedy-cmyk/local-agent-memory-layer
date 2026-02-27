@@ -1,6 +1,6 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications, using a local vector database as the data layer (Firebolt Core by default in this fork, with additional local backends planned).
+An MCP server that provides intelligent memory management for LLM applications, using a local vector database as the data layer. You can choose **Firebolt** (default) or **Elasticsearch** for long-term memory and vector search.
 
 ## Features
 
@@ -18,7 +18,7 @@ An MCP server that provides intelligent memory management for LLM applications, 
 ### Prerequisites
 
 - Python 3.10+
-- A local vector database (currently Firebolt Core; other backends coming)
+- A local vector database: **Firebolt Core** (default) or **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md))
 - OpenAI API key (for embeddings), or a compatible local embedding model
 - Ollama installed locally (for classification and/or embeddings)
 
@@ -97,6 +97,7 @@ Environment variables (in `.env`):
 
 | Variable | Description |
 |----------|-------------|
+| `LAML_VECTOR_BACKEND` | `firebolt` (default) or `elastic` |
 | `OPENAI_API_KEY` | OpenAI API key for embeddings (if using OpenAI) |
 | `FIREBOLT_ACCOUNT_NAME` | Firebolt account name (for Firebolt backend) |
 | `FIREBOLT_CLIENT_ID` | Firebolt client ID (for Firebolt backend) |

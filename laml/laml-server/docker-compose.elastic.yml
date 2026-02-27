@@ -1,0 +1,44 @@
+# Elasticsearch + optional Elastic MCP for LAML (vector backend=elastic)
+#
+# Run: docker compose -f docker-compose.elastic.yml up -d
+# Then set LAML_VECTOR_BACKEND=elastic and ELASTICSEARCH_URL=http://localhost:9200
+# (no auth for local dev; add ELASTICSEARCH_API_KEY if you enable security)
+#
+# Create the LAML index: from laml-server dir with .env set:
+#   python scripts/init_elastic_index.py
+
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: laml-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w %{http_code} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Optional: Elastic MCP server for Cursor (query Elasticsearch from IDE)
+  # Add to ~/.cursor/mcp.json or use env ES_URL/ES_API_KEY when security is on
+  elastic-mcp:
+    image: docker.elastic.co/mcp/elasticsearch:latest
+    container_name: laml-elastic-mcp
+    environment:
+      - ES_URL=http://elasticsearch:9200
+      # ELASTICSEARCH_API_KEY=  # set if xpack.security.enabled=true
+    stdin_open: true
+    tty: true
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles:
+      - mcp

@@ -14,8 +14,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 from src.db.client import db
-from src.metrics import metrics
 from src.config import config
+from src.metrics import metrics
+from src.memory.backend import get_memory_repository
 
 # Capture server start time and code file modification time for sync detection
 _SERVER_START_TIME = datetime.now()
@@ -190,12 +191,10 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 elif key == "firebolt":
                     service_stats["services"][key]["by_operation"] = {}
 
-        # Get memory counts from database
+        # Get memory counts (long-term from configured backend; sessions/wm from Firebolt)
         try:
-            ltm_result = db.execute(
-                "SELECT COUNT(*) FROM long_term_memories WHERE deleted_at IS NULL"
-            )
-            ltm_count = ltm_result[0][0] if ltm_result else 0
+            repo = get_memory_repository()
+            ltm_count = repo.count_total(include_deleted=False)
 
             sessions_result = db.execute(
                 "SELECT COUNT(*) FROM session_contexts"
@@ -217,21 +216,24 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
             )
             access_log_count = access_result[0][0] if access_result else 0
 
-            category_result = db.execute("""
-                SELECT memory_category, COUNT(*) as cnt
-                FROM long_term_memories
-                WHERE deleted_at IS NULL
-                GROUP BY memory_category
-            """)
-            by_category = {row[0]: row[1] for row in category_result}
-
-            top_accessed = db.execute("""
-                SELECT memory_id, memory_category, access_count, importance, content
-                FROM long_term_memories
-                WHERE deleted_at IS NULL
-                ORDER BY access_count DESC
-                LIMIT 5
-            """)
+            # Category breakdown and top_accessed: use DB when Firebolt backend; else skip (Elastic path)
+            by_category = {}
+            top_accessed = []
+            if config.vector_backend == "firebolt":
+                category_result = db.execute("""
+                    SELECT memory_category, COUNT(*) as cnt
+                    FROM long_term_memories
+                    WHERE deleted_at IS NULL
+                    GROUP BY memory_category
+                """)
+                by_category = {row[0]: row[1] for row in category_result}
+                top_accessed = db.execute("""
+                    SELECT memory_id, memory_category, access_count, importance, content
+                    FROM long_term_memories
+                    WHERE deleted_at IS NULL
+                    ORDER BY access_count DESC
+                    LIMIT 5
+                """)
 
             # Get storage sizes from SHOW TABLES
             # Include all LAML tables for accurate total
@@ -386,8 +388,9 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         })
 
     def handle_config(self):
-        """Get FML configuration (brain location, etc)."""
-        self.send_json({
+        """Get LAML configuration (vector backend, brain location, etc)."""
+        payload = {
+            "vector_backend": config.vector_backend,
             "brain_location": "local" if config.firebolt.use_core else "cloud",
             "firebolt": {
                 "use_core": config.firebolt.use_core,
@@ -399,8 +402,14 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 "host": config.ollama.host,
                 "model": config.ollama.model,
                 "embedding_model": config.ollama.embedding_model,
+            },
+        }
+        if config.vector_backend == "elastic":
+            payload["elastic"] = {
+                "url": config.elastic.url,
+                "index_name": config.elastic.index_name,
             }
-        })
+        self.send_json(payload)
 
     def handle_version(self):
         """Get server version info and detect code sync issues.
@@ -424,10 +433,18 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         })
 
     def handle_analytics(self, query):
-        """Get memory analytics."""
+        """Get memory analytics (Firebolt backend only for category/importance breakdown)."""
         user_id = query.get('user_id', [None])[0]
-        
         try:
+            if config.vector_backend != "firebolt":
+                self.send_json({
+                    "by_subtype": [],
+                    "by_importance": {},
+                    "user_filter": user_id or "all",
+                    "note": "Analytics breakdown available with Firebolt vector backend only.",
+                })
+                return
+
             user_filter = ""
             params = ()
             if user_id:

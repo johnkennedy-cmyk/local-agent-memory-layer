@@ -40,11 +40,28 @@ class OllamaConfig:
 
 
 @dataclass
+class ElasticConfig:
+    """Elasticsearch connection configuration (for vector backend=elastic)."""
+    url: str
+    api_key: str
+    username: str
+    password: str
+    index_name: str
+    ssl_verify: bool = True
+    # Embedding dimension must match Ollama/OpenAI embedding model (e.g. 768 for nomic)
+    embedding_dimensions: int = 768
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     firebolt: FireboltConfig
     openai: OpenAIConfig
     ollama: OllamaConfig
+    elastic: ElasticConfig
+
+    # Vector backend: "firebolt" or "elastic"
+    vector_backend: str = "firebolt"
 
     # Memory defaults
     default_max_tokens: int = 8000
@@ -76,10 +93,29 @@ def load_config() -> Config:
         embedding_dimensions=int(os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")),
     )
 
+    vector_backend = (os.getenv("LAML_VECTOR_BACKEND", "firebolt") or "firebolt").strip().lower()
+    if vector_backend not in ("firebolt", "elastic"):
+        vector_backend = "firebolt"
+
+    elastic = ElasticConfig(
+        url=os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"),
+        api_key=os.getenv("ELASTICSEARCH_API_KEY", ""),
+        username=os.getenv("ELASTICSEARCH_USERNAME", ""),
+        password=os.getenv("ELASTICSEARCH_PASSWORD", ""),
+        index_name=os.getenv("ELASTICSEARCH_INDEX", "laml_long_term_memories"),
+        ssl_verify=os.getenv("ELASTICSEARCH_SSL_VERIFY", "true").lower() == "true",
+        embedding_dimensions=int(
+            os.getenv("ELASTICSEARCH_EMBEDDING_DIMENSIONS")
+            or os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")
+        ),
+    )
+
     return Config(
         firebolt=firebolt,
         openai=openai,
         ollama=ollama,
+        elastic=elastic,
+        vector_backend=vector_backend,
     )
 
 

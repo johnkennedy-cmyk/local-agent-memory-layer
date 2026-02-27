@@ -5,6 +5,7 @@ description = "Local Agent Memory Layer (LAML) - MCP server for LLM memory manag
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "elasticsearch>=8.0.0",
     "firebolt-sdk>=1.0.0",
     "openai>=1.0.0",
     "ollama>=0.1.0",

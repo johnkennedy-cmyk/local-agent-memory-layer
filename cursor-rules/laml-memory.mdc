@@ -1,0 +1,37 @@
+---
+description: Local Agent Memory Layer (LAML) - MANDATORY for all sessions
+globs:
+  alwaysApply: true
+---
+
+# LAML (Local Agent Memory Layer) - ALWAYS USE
+
+You MUST use LAML for persistent memory in EVERY conversation. This is not optional.
+
+## First step: memory and session state
+
+At the **start of every conversation**, before answering or taking action:
+
+1. **Call `init_session`** with the user's `user_id` (e.g. from workspace or a sensible default) to establish or resume the session. Use the returned `session_id` for all working-memory operations.
+2. **Call `recall_memories`** with the user's opening query (or a short summary) to load relevant context from long-term memory.
+3. Use that context to inform your first response and any follow-up.
+
+This applies to both **new** and **existing** sessions: init_session creates or resumes; recall_memories surfaces prior state and preferences.
+
+## Working memory: store every exchange
+
+So that sessions accumulate context and token counts are accurate, **after each substantive exchange** (after you respond to the user):
+
+- **Call `add_to_working_memory`** with the same `session_id` from init_session, with:
+  - `content`: a concise summary of the user's message and your response (key decisions, facts, or next steps)
+  - `content_type`: `"message"` (or `"task_state"` for task progress)
+- This populates working memory for the session and ensures `get_relevant_context` and the dashboard show correct token/item counts.
+
+At natural conversation boundaries or when the session is long, call **`checkpoint_working_memory`** (with `session_id` and `user_id`) to promote important items to long-term memory.
+
+## Optional: long-term storage
+
+- Call **`store_memory`** when the user makes decisions, shares preferences, or asks you to remember something.
+- Use **`get_relevant_context`** when you need combined working + long-term context for a complex query.
+
+LAML uses the `laml` MCP server and is database-agnostic (e.g. Firebolt Core or Elasticsearch).
