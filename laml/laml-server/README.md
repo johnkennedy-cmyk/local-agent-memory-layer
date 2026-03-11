@@ -145,16 +145,18 @@ After completing the base setup above, pick one of these quick paths:
   - Typical local setup:
     ```bash
     # From laml-server/
-    docker compose -f docker-compose.elastic.yml up -d
-    # Optional quick health check (expects 200):
-    curl http://localhost:9200
-    python scripts/init_elastic.py
+  # If you already have a local Elasticsearch cluster (for example from elastic-start-local),
+  # you can point LAML at that instead of starting the docker-compose profile.
+  # Optional quick health check (expects JSON with cluster info):
+  curl http://localhost:9200
+  # Then create the LAML index with the proper dense_vector mapping:
+  python scripts/init_elastic_index.py
     ```
   - In `.env`, set:
     ```bash
     LAML_VECTOR_BACKEND=elastic
     ELASTICSEARCH_URL=http://localhost:9200
-    ELASTICSEARCH_INDEX=laml-long-term-memories
+  ELASTICSEARCH_INDEX=laml_long_term_memories
     ```
   - Then start the server:
     ```bash

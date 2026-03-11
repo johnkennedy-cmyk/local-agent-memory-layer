@@ -138,10 +138,44 @@ const SERVICE_INFO = {
 // Data Flow Diagram Component with SVG-based connections
 function DataFlowDiagram({ config, delay = 0 }) {
   const ollamaHost = config?.ollama?.host || 'localhost:11434'
-  const fireboltLocation = config?.brain_location === 'local' ? 'Local Vector DB' : 'Remote'
-  const fireboltUrl = config?.firebolt?.use_core
-    ? config?.firebolt?.core_url
-    : (config?.firebolt?.account_name || 'custom-backend')
+  const vectorBackend = config?.vector_backend || 'firebolt'
+
+  // Vector backend label + URL based on current config (firebolt, elastic, or clickhouse)
+  const vectorBackendLabel =
+    vectorBackend === 'elastic'
+      ? 'Elasticsearch'
+      : vectorBackend === 'clickhouse'
+      ? 'ClickHouse'
+      : 'Firebolt'
+
+  const vectorLocation = config?.brain_location === 'local' ? 'Local Vector DB' : 'Remote Vector DB'
+
+  let vectorUrl = ''
+  if (vectorBackend === 'elastic') {
+    vectorUrl = config?.elastic?.url || 'http://localhost:9200'
+  } else if (vectorBackend === 'clickhouse') {
+    const host = config?.clickhouse?.host || 'localhost'
+    const port = config?.clickhouse?.port || 8123
+    vectorUrl = `${host}:${port}`
+  } else {
+    vectorUrl = config?.firebolt?.use_core
+      ? config?.firebolt?.core_url
+      : (config?.firebolt?.account_name || 'custom-backend')
+  }
+
+  // Database MCP node label/URL should follow the active vector backend as well
+  let dbMcpLabel = 'Database MCP'
+  let dbMcpUrl = ''
+  if (vectorBackend === 'elastic') {
+    dbMcpLabel = 'DB MCP (Elasticsearch)'
+    dbMcpUrl = 'docker.elastic.co/mcp/elasticsearch (stdio via Cursor)'
+  } else if (vectorBackend === 'clickhouse') {
+    dbMcpLabel = 'DB MCP (ClickHouse)'
+    dbMcpUrl = 'mcp/clickhouse (docker)'
+  } else {
+    dbMcpLabel = 'DB MCP (Firebolt)'
+    dbMcpUrl = 'localhost:8080/sse'
+  }
 
   // SVG dimensions for the flow diagram
   const svgWidth = 1400
@@ -744,7 +778,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-action">"What's the GitHub auth method we use?"</div>
           </div>
 
-          {/* Firebolt MCP Server Node */}
+          {/* Database MCP Server Node (follows active vector backend) */}
           <div
             className="flow-node firebolt-mcp-node"
             style={{
@@ -756,9 +790,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             }}
           >
             <div className="node-icon">🐳</div>
-            <div className="node-label">Firebolt MCP</div>
-            <div className="node-action">Direct Queries</div>
-            <div className="node-url">localhost:8080/sse</div>
+            <div className="node-label">{dbMcpLabel}</div>
+            <div className="node-action">Direct DB Queries</div>
+            <div className="node-url">{dbMcpUrl}</div>
           </div>
 
           {/* FML Node */}
@@ -823,9 +857,9 @@ function DataFlowDiagram({ config, delay = 0 }) {
             }}
           >
             <div className="node-icon">🔥</div>
-            <div className="node-label">Firebolt {fireboltLocation}</div>
+            <div className="node-label">{vectorBackendLabel} {vectorLocation}</div>
             <div className="node-action">Vector Search</div>
-            <div className="node-url">{fireboltUrl}</div>
+            <div className="node-url">{vectorUrl}</div>
           </div>
         </div>
       </div>
@@ -1270,7 +1304,10 @@ const fetchStats = useCallback(async () => {
         <div className="memory-error-banner">
           <span className="memory-error-icon">⚠️</span>
           <span>Could not load memory stats: {safeStats.memory.error}</span>
-          <span className="memory-error-hint">Check that Firebolt Core is running and LAML HTTP API can reach it.</span>
+          <span className="memory-error-hint">
+            Check that the configured vector backend (Firebolt / Elasticsearch / ClickHouse) is reachable
+            and that the LAML HTTP API can connect to it.
+          </span>
         </div>
       )}
 
