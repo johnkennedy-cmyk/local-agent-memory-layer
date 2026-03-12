@@ -1,6 +1,6 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications, using a local vector database as the data layer. Working memory/session state uses **Firebolt Core**, and long-term memory/vector search can use **Firebolt** (default), **Elasticsearch**, or **ClickHouse**.
+An MCP server that provides intelligent memory management for LLM applications. It uses a **single configurable backend** for all data: **Firebolt** (default), **Elasticsearch**, or **ClickHouse**. When you choose Elasticsearch or ClickHouse, sessions, working memory, and long-term memory all use that backend; **Firebolt is not required** in that case.
 
 ## Features
 
@@ -18,11 +18,10 @@ An MCP server that provides intelligent memory management for LLM applications, 
 ### Prerequisites
 
 - Python 3.10+
-- **Firebolt Core** for working memory/session state
-- A vector backend for long-term memory:
-  - **Firebolt Core / Firebolt Cloud** (default)
-  - **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md))
-  - **ClickHouse** (see [ClickHouse backend](docs/CLICKHOUSE_VECTOR_BACKEND.md))
+- A single backend for all LAML data (sessions, working memory, long-term memory):
+  - **Firebolt Core / Firebolt Cloud** (default) – requires Firebolt
+  - **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md)) – Firebolt not required
+  - **ClickHouse** (see [ClickHouse backend](docs/CLICKHOUSE_VECTOR_BACKEND.md)) – Firebolt not required
 - OpenAI API key (for embeddings), or a compatible local embedding model
 - Ollama installed locally (for classification and/or embeddings)
 

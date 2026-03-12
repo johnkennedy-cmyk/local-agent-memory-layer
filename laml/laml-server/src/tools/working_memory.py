@@ -5,7 +5,8 @@ import uuid
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
-from src.db.client import db
+from src.db.backend_router import get_session_store, get_working_memory_store
+from src.db.working_memory_store import WorkingMemoryItem
 from src.llm.embeddings import embedding_service
 from src.security import validate_content_for_storage
 
@@ -33,32 +34,19 @@ def register_working_memory_tools(mcp: FastMCP):
             JSON with session_id and whether it was newly created
         """
         sid = session_id or str(uuid.uuid4())
+        session_store = get_session_store()
 
-        # Check if session exists
-        existing = db.execute(
-            "SELECT session_id, total_tokens, max_tokens FROM session_contexts WHERE session_id = ?",
-            (sid,)
-        )
-
+        existing = session_store.get_session(sid)
         if existing:
-            # Update last activity
-            db.execute(
-                "UPDATE session_contexts SET last_activity = CURRENT_TIMESTAMP() WHERE session_id = ?",
-                (sid,)
-            )
+            session_store.touch_session(sid)
             return json.dumps({
                 "session_id": sid,
                 "created": False,
-                "total_tokens": existing[0][1],
-                "max_tokens": existing[0][2]
+                "total_tokens": existing.total_tokens,
+                "max_tokens": existing.max_tokens
             })
 
-        # Create new session
-        db.execute("""
-            INSERT INTO session_contexts (session_id, user_id, org_id, max_tokens, total_tokens)
-            VALUES (?, ?, ?, ?, 0)
-        """, (sid, user_id, org_id, max_tokens))
-
+        session_store.create_session(sid, user_id, org_id, max_tokens)
         return json.dumps({
             "session_id": sid,
             "created": True,
@@ -107,23 +95,16 @@ def register_working_memory_tools(mcp: FastMCP):
         item_id = str(uuid.uuid4())
         token_count = embedding_service.count_tokens(content)
 
-        # Get session info
-        session = db.execute(
-            "SELECT user_id, total_tokens, max_tokens FROM session_contexts WHERE session_id = ?",
-            (session_id,)
-        )
+        session_store = get_session_store()
+        wm_store = get_working_memory_store()
 
+        session = session_store.get_session(session_id)
         if not session:
             return json.dumps({"error": f"Session not found: {session_id}"})
 
-        user_id, total_tokens, max_tokens = session[0]
+        user_id, total_tokens, max_tokens = session.user_id, session.total_tokens, session.max_tokens
 
-        # Get next sequence number
-        result = db.execute(
-            "SELECT COALESCE(MAX(sequence_num), 0) + 1 FROM working_memory_items WHERE session_id = ?",
-            (session_id,)
-        )
-        seq_num = result[0][0] if result else 1
+        seq_num = wm_store.get_next_sequence_num(session_id)
 
         # Check if we need to evict items
         evicted_items = []
@@ -134,21 +115,19 @@ def register_working_memory_tools(mcp: FastMCP):
                 token_count - (max_tokens - total_tokens)
             )
 
-        # Insert item
-        db.execute("""
-            INSERT INTO working_memory_items
-            (item_id, session_id, user_id, content_type, content, token_count,
-             relevance_score, pinned, sequence_num)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (item_id, session_id, user_id, content_type, content, token_count,
-              relevance_score, pinned, seq_num))
-
-        # Update session token count
-        db.execute("""
-            UPDATE session_contexts
-            SET total_tokens = total_tokens + ?, last_activity = CURRENT_TIMESTAMP()
-            WHERE session_id = ?
-        """, (token_count, session_id))
+        item = WorkingMemoryItem(
+            item_id=item_id,
+            session_id=session_id,
+            user_id=user_id,
+            content_type=content_type,
+            content=content,
+            token_count=token_count,
+            pinned=pinned,
+            relevance_score=relevance_score,
+            sequence_num=seq_num,
+        )
+        wm_store.insert_item(item)
+        session_store.increment_total_tokens(session_id, token_count)
 
         return json.dumps({
             "item_id": item_id,
@@ -174,54 +153,33 @@ def register_working_memory_tools(mcp: FastMCP):
         Returns:
             JSON with items, total_tokens, and truncation status
         """
-        # Get session info
-        session = db.execute(
-            "SELECT max_tokens, total_tokens FROM session_contexts WHERE session_id = ?",
-            (session_id,)
-        )
+        session_store = get_session_store()
+        wm_store = get_working_memory_store()
 
+        session = session_store.get_session(session_id)
         if not session:
             return json.dumps({"error": f"Session not found: {session_id}"})
 
-        max_tokens, total_tokens = session[0]
+        max_tokens, total_tokens = session.max_tokens, session.total_tokens
         budget = token_budget or max_tokens
 
-        # Build query
-        query = """
-            SELECT item_id, content_type, content, token_count, pinned,
-                   relevance_score, sequence_num
-            FROM working_memory_items
-            WHERE session_id = ?
-        """
-        params = [session_id]
+        include_types_list = [t.strip() for t in include_types.split(",")] if include_types else None
+        items = wm_store.get_items_for_session(session_id, include_types=include_types_list)
 
-        if include_types:
-            types = [t.strip() for t in include_types.split(",")]
-            placeholders = ",".join(["?" for _ in types])
-            query += f" AND content_type IN ({placeholders})"
-            params.extend(types)
-
-        query += " ORDER BY pinned DESC, relevance_score DESC, sequence_num DESC"
-
-        items = db.execute(query, tuple(params))
-
-        # Collect items within budget
         result_items = []
         used_tokens = 0
-
         for item in items:
-            item_tokens = item[3]
-            if used_tokens + item_tokens <= budget:
+            if used_tokens + item.token_count <= budget:
                 result_items.append({
-                    "item_id": item[0],
-                    "content_type": item[1],
-                    "content": item[2],
-                    "token_count": item_tokens,
-                    "pinned": bool(item[4]),
-                    "relevance_score": item[5],
-                    "sequence_num": item[6]
+                    "item_id": item.item_id,
+                    "content_type": item.content_type,
+                    "content": item.content,
+                    "token_count": item.token_count,
+                    "pinned": item.pinned,
+                    "relevance_score": item.relevance_score,
+                    "sequence_num": item.sequence_num
                 })
-                used_tokens += item_tokens
+                used_tokens += item.token_count
 
         return json.dumps({
             "items": result_items,
@@ -250,29 +208,10 @@ def register_working_memory_tools(mcp: FastMCP):
         Returns:
             JSON with success status
         """
-        updates = []
-        params = []
-
-        if pinned is not None:
-            updates.append("pinned = ?")
-            params.append(pinned)
-
-        if relevance_score is not None:
-            updates.append("relevance_score = ?")
-            params.append(relevance_score)
-
-        if not updates:
+        if pinned is None and relevance_score is None:
             return json.dumps({"error": "No updates provided"})
 
-        updates.append("last_accessed = CURRENT_TIMESTAMP()")
-        params.extend([item_id, session_id])
-
-        db.execute(f"""
-            UPDATE working_memory_items
-            SET {", ".join(updates)}
-            WHERE item_id = ? AND session_id = ?
-        """, tuple(params))
-
+        get_working_memory_store().update_item_flags(item_id, session_id, pinned, relevance_score)
         return json.dumps({"success": True, "item_id": item_id})
 
     @mcp.tool()
@@ -290,46 +229,21 @@ def register_working_memory_tools(mcp: FastMCP):
         Returns:
             JSON with number of items cleared
         """
+        wm_store = get_working_memory_store()
+        session_store = get_session_store()
+
         if preserve_pinned:
-            # Get count of items to delete
-            count_result = db.execute(
-                "SELECT COUNT(*) FROM working_memory_items WHERE session_id = ? AND pinned = FALSE",
-                (session_id,)
-            )
-            count = count_result[0][0] if count_result else 0
-
-            # Delete non-pinned items
-            db.execute(
-                "DELETE FROM working_memory_items WHERE session_id = ? AND pinned = FALSE",
-                (session_id,)
-            )
-
-            # Recalculate token count
-            token_result = db.execute(
-                "SELECT COALESCE(SUM(token_count), 0) FROM working_memory_items WHERE session_id = ?",
-                (session_id,)
-            )
-            new_total = token_result[0][0] if token_result else 0
+            count_before = wm_store.count_items(session_id)
+            pinned_count = wm_store.count_items(session_id, pinned_only=True)
+            count = count_before - pinned_count
+            wm_store.delete_items(session_id, pinned_only=False)
+            new_total = wm_store.sum_tokens(session_id)
         else:
-            # Get count of all items
-            count_result = db.execute(
-                "SELECT COUNT(*) FROM working_memory_items WHERE session_id = ?",
-                (session_id,)
-            )
-            count = count_result[0][0] if count_result else 0
-
-            # Delete all items
-            db.execute(
-                "DELETE FROM working_memory_items WHERE session_id = ?",
-                (session_id,)
-            )
+            count = wm_store.count_items(session_id)
+            wm_store.delete_items(session_id)
             new_total = 0
 
-        # Update session token count
-        db.execute(
-            "UPDATE session_contexts SET total_tokens = ? WHERE session_id = ?",
-            (new_total, session_id)
-        )
+        session_store.update_total_tokens(session_id, new_total)
 
         return json.dumps({
             "success": True,
@@ -344,38 +258,21 @@ async def _evict_working_memory(session_id: str, user_id: str, tokens_needed: in
 
     Strategy: Evict lowest relevance non-pinned items first.
     """
-    # Get eviction candidates (non-pinned, ordered by relevance then age)
-    candidates = db.execute("""
-        SELECT item_id, token_count, relevance_score
-        FROM working_memory_items
-        WHERE session_id = ? AND pinned = FALSE
-        ORDER BY relevance_score ASC, sequence_num ASC
-    """, (session_id,))
+    wm_store = get_working_memory_store()
+    session_store = get_session_store()
 
+    candidates = wm_store.eviction_candidates(session_id)
     evicted = []
     freed_tokens = 0
 
-    for item in candidates:
+    for item_id, token_count, _ in candidates:
         if freed_tokens >= tokens_needed:
             break
-
-        item_id, token_count, _ = item
-
-        # Delete the item
-        db.execute(
-            "DELETE FROM working_memory_items WHERE item_id = ?",
-            (item_id,)
-        )
-
+        wm_store.delete_item(item_id)
         evicted.append(item_id)
         freed_tokens += token_count
 
-    # Update session token count
     if evicted:
-        db.execute("""
-            UPDATE session_contexts
-            SET total_tokens = total_tokens - ?
-            WHERE session_id = ?
-        """, (freed_tokens, session_id))
+        session_store.increment_total_tokens(session_id, -freed_tokens)
 
     return evicted

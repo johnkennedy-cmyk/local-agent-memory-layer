@@ -47,6 +47,8 @@ class ElasticConfig:
     username: str
     password: str
     index_name: str
+    sessions_index: str
+    working_memory_index: str
     ssl_verify: bool = True
     # Embedding dimension must match Ollama/OpenAI embedding model (e.g. 768 for nomic)
     embedding_dimensions: int = 768
@@ -61,6 +63,8 @@ class ClickHouseConfig:
     user: str
     password: str
     table_name: str
+    sessions_table: str
+    working_memory_table: str
     embedding_dimensions: int = 768
 
 
@@ -116,6 +120,8 @@ def load_config() -> Config:
         username=os.getenv("ELASTICSEARCH_USERNAME", ""),
         password=os.getenv("ELASTICSEARCH_PASSWORD", ""),
         index_name=os.getenv("ELASTICSEARCH_INDEX", "laml_long_term_memories"),
+        sessions_index=os.getenv("ELASTICSEARCH_SESSIONS_INDEX", "laml_sessions"),
+        working_memory_index=os.getenv("ELASTICSEARCH_WORKING_MEMORY_INDEX", "laml_working_memory"),
         ssl_verify=os.getenv("ELASTICSEARCH_SSL_VERIFY", "true").lower() == "true",
         embedding_dimensions=int(
             os.getenv("ELASTICSEARCH_EMBEDDING_DIMENSIONS")
@@ -130,6 +136,8 @@ def load_config() -> Config:
         user=os.getenv("CLICKHOUSE_USER", "default"),
         password=os.getenv("CLICKHOUSE_PASSWORD", ""),
         table_name=os.getenv("CLICKHOUSE_TABLE", "long_term_memories"),
+        sessions_table=os.getenv("CLICKHOUSE_SESSIONS_TABLE", "session_contexts"),
+        working_memory_table=os.getenv("CLICKHOUSE_WORKING_MEMORY_TABLE", "working_memory_items"),
         embedding_dimensions=int(
             os.getenv("CLICKHOUSE_EMBEDDING_DIMENSIONS")
             or os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")

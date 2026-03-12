@@ -183,3 +183,82 @@ class ElasticMemoryRepository:
             },
             refresh=True,
         )
+
+    def get_category_counts(self) -> Dict[str, int]:
+        """
+        Return counts per memory_category (non-deleted).
+        Uses a terms aggregation on memory_category with a filter to exclude deleted_at.
+        """
+        query: Dict[str, Any] = {
+            "bool": {
+                "must_not": {"exists": {"field": "deleted_at"}},
+            }
+        }
+        aggs = {
+            "by_category": {
+                "terms": {"field": "memory_category.keyword", "size": 50},
+            }
+        }
+        resp = self._client.search(
+            index=self._index,
+            body={"size": 0, "query": query, "aggs": aggs},
+        )
+        buckets = resp.get("aggregations", {}).get("by_category", {}).get("buckets", [])
+        return {b["key"]: int(b["doc_count"]) for b in buckets}
+
+    def get_top_accessed(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Return top accessed memories based on access_count descending.
+        Only includes non-deleted documents.
+        """
+        query: Dict[str, Any] = {
+            "bool": {
+                "must_not": {"exists": {"field": "deleted_at"}},
+            }
+        }
+        resp = self._client.search(
+            index=self._index,
+            body={
+                "size": int(limit),
+                "query": query,
+                "sort": [{"access_count": {"order": "desc"}}],
+                "_source": [
+                    "memory_id",
+                    "memory_category",
+                    "access_count",
+                    "importance",
+                    "content",
+                ],
+            },
+        )
+        hits = resp.get("hits", {}).get("hits", [])
+        result: List[Dict[str, Any]] = []
+        for h in hits:
+            src = h.get("_source", {})
+            result.append(
+                {
+                    "memory_id": src.get("memory_id") or h.get("_id"),
+                    "memory_category": src.get("memory_category", ""),
+                    "access_count": src.get("access_count", 0),
+                    "importance": src.get("importance", 0),
+                    "content": src.get("content", ""),
+                }
+            )
+        return result
+
+    def get_storage_bytes(self) -> int:
+        """
+        Approximate total storage footprint (bytes) for the long-term memory index.
+        Uses Elasticsearch indices stats 'store.size_in_bytes'.
+        """
+        try:
+            stats = self._client.indices.stats(index=self._index, metric="store")
+            indices = stats.get("indices") or {}
+            data = indices.get(self._index)
+            if not data and indices:
+                # Fall back to first entry if index key is aliased
+                data = next(iter(indices.values()))
+            size_bytes = int(data.get("total", {}).get("store", {}).get("size_in_bytes", 0)) if data else 0
+            return size_bytes
+        except Exception:
+            return 0

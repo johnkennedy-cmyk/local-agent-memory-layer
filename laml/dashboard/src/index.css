@@ -1,45 +1,50 @@
 :root {
-  /* Firebolt Brand Color Palette - LIGHT MODE */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #FFF2F3;
-  --bg-card: #F5EBEB;
-  --bg-card-hover: #FFFCF9;
+  /* Dark analytics palette: black, orange, luminous green */
+  --bg-primary: #050608;
+  --bg-secondary: #0b0d12;
+  --bg-card: #111319;
+  --bg-card-hover: #181b24;
 
-  /* Primary Firebolt Red */
-  --accent-fire: #F72A30;
-  --accent-fire-glow: rgba(247, 42, 48, 0.15);
-  --accent-fire-dark: #AC2422;
-  --accent-fire-light: #FF4848;
+  /* Accents */
+  --accent-orange: #ff8a3c;
+  --accent-orange-soft: rgba(255, 138, 60, 0.18);
+  --accent-green: #5cff8d;
+  --accent-green-soft: rgba(92, 255, 141, 0.16);
+  --accent-line: #2b323f;
 
-  /* Secondary accents */
-  --accent-cyan: #F72A30;
-  --accent-cyan-glow: rgba(247, 42, 48, 0.1);
-  --accent-purple: #AC2422;
-  --accent-green: #FF4848;
-  --accent-yellow: #FFF2F3;
+  /* Legacy semantic aliases used in App.jsx (mapped onto new palette) */
+  --accent-fire: var(--accent-orange);
+  --accent-fire-glow: rgba(255, 138, 60, 0.16);
+  --accent-fire-dark: #d96a20;
+  --accent-fire-light: #ffb27a;
 
-  /* Text colors - dark on light */
-  --text-primary: #1A0404;
-  --text-secondary: #665555;
-  --text-muted: #998A85;
+  --accent-cyan: var(--accent-green);
+  --accent-cyan-glow: var(--accent-green-soft);
+  --accent-purple: #8f9bb8;
+  --accent-yellow: #f5e663;
+
+  /* Text colors - light on dark */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5f5;
+  --text-muted: #8f9bb8;
 
   /* Borders */
-  --border-subtle: rgba(26, 4, 4, 0.1);
-  --border-accent: rgba(247, 42, 48, 0.4);
+  --border-subtle: rgba(143, 155, 184, 0.3);
+  --border-accent: rgba(255, 138, 60, 0.55);
 
-  /* Firebolt Typography */
-  --font-display: 'Poppins', sans-serif;
-  --font-body: 'Inter', sans-serif;
-  --font-mono: 'Roboto Mono', monospace;
+  /* Typography - 8-bit/terminal inspired mono */
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --font-display: var(--font-mono);
+  --font-body: var(--font-mono);
 
-  /* Effects - softer for light mode */
-  --shadow-glow: 0 0 20px rgba(247, 42, 48, 0.1);
-  --shadow-card: 0 4px 16px rgba(26, 4, 4, 0.08);
+  /* Effects */
+  --shadow-glow: 0 0 32px rgba(255, 138, 60, 0.35);
+  --shadow-card: 0 18px 45px rgba(0, 0, 0, 0.75);
 
-  /* Firebolt-specific surface colors */
-  --surface-light: #F5EBEB;
-  --surface-lighter: #FFF2F3;
-  --firebolt-black: #1A0404;
+  /* Surfaces */
+  --surface-light: #111319;
+  --surface-lighter: #181b24;
+  --firebolt-black: #050608;
 }
 
 * {
@@ -50,17 +55,18 @@
 
 body {
   font-family: var(--font-body);
-  background: var(--bg-primary);
+  background: radial-gradient(circle at top left, #161927 0, #050608 55%, #020308 100%);
   color: var(--text-primary);
   min-height: 100vh;
-  line-height: 1.5;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
 }
 
-/* Subtle background gradient - Firebolt light mode */
+/* Subtle background glow layer */
 body::before {
   content: '';
   position: fixed;
@@ -69,9 +75,9 @@ body::before {
   right: 0;
   bottom: 0;
   background:
-    radial-gradient(ellipse at 20% 20%, rgba(247, 42, 48, 0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(245, 235, 235, 0.5) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(255, 242, 243, 0.3) 0%, transparent 60%);
+    radial-gradient(ellipse at 10% 0%, rgba(255, 138, 60, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(92, 255, 141, 0.13) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 40%, rgba(15, 23, 42, 0.9) 0%, transparent 65%);
   pointer-events: none;
   z-index: -1;
 }
@@ -80,23 +86,23 @@ body::before {
   min-height: 100vh;
 }
 
-/* Scrollbar styling - light mode */
+/* Scrollbar styling - dark */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-card);
+  background: rgba(15, 23, 42, 0.9);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
+  background: rgba(148, 163, 184, 0.8);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: #e5e7eb;
 }
 
 /* Animations */

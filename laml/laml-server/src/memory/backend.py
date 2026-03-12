@@ -205,6 +205,42 @@ class FireboltMemoryRepository:
             (memory_id,),
         )
 
+    def get_category_counts(self) -> Dict[str, int]:
+        """Return counts per memory_category (non-deleted)."""
+        rows = self._db.execute(
+            """
+            SELECT memory_category, COUNT(*) as cnt
+            FROM long_term_memories
+            WHERE deleted_at IS NULL
+            GROUP BY memory_category
+            """
+        )
+        return {row[0]: row[1] for row in rows}
+
+    def get_top_accessed(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Return top accessed memories for stats."""
+        rows = self._db.execute(
+            f"""
+            SELECT memory_id, memory_category, access_count, importance, content
+            FROM long_term_memories
+            WHERE deleted_at IS NULL
+            ORDER BY access_count DESC
+            LIMIT {int(limit)}
+            """
+        )
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            result.append(
+                {
+                    "memory_id": row[0],
+                    "memory_category": row[1],
+                    "access_count": row[2],
+                    "importance": row[3],
+                    "content": row[4] or "",
+                }
+            )
+        return result
+
 
 def get_vector_store() -> VectorStore:
     """Return the configured vector store (Firebolt, Elastic, or ClickHouse)."""

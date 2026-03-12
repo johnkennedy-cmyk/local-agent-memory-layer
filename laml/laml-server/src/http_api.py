@@ -14,6 +14,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 from src.db.client import db
+from src.db.backend_router import get_session_store, get_working_memory_store
 from src.config import config
 from src.metrics import metrics
 from src.memory.backend import get_memory_repository
@@ -57,6 +58,8 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/calls/'):
                 service = path.split('/')[-1]
                 self.handle_calls(service, query)
+            elif path == '/api/vector-backend':
+                self.handle_vector_backend(query)
             elif path == '/api/analytics':
                 self.handle_analytics(query)
             elif path == '/api/config':
@@ -77,10 +80,11 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         # Get metrics from collector (local firebolt calls)
         service_stats = metrics.get_stats(time_window)
 
-        # Augment with database metrics for ollama/embedding (cross-process)
+        # Augment with database metrics for ollama/embedding (cross-process) - Firebolt only
         try:
-            # Get ollama metrics from database - windowed stats
-            ollama_window = db.execute(f"""
+            if config.vector_backend == "firebolt":
+                # Get ollama metrics from database - windowed stats
+                ollama_window = db.execute(f"""
                 SELECT
                     COUNT(*) as cnt,
                     COALESCE(AVG(latency_ms), 0) as avg_lat,
@@ -126,7 +130,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                     "total_errors": total_ollama_errors,
                 }
 
-            # Get embedding metrics from database - windowed stats
+            # Get embedding metrics from database - windowed stats (Firebolt)
             embed_window = db.execute(f"""
                 SELECT
                     COUNT(*) as cnt,
@@ -169,8 +173,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                     "total_calls": total_embed_calls,
                     "total_errors": total_embed_errors,
                 }
-        except Exception as e:
-            # If database query fails, stick with in-memory stats
+        except Exception:
             pass
 
         # Always ensure all three service keys exist for dashboard (zeros if missing)
@@ -191,100 +194,126 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 elif key == "firebolt":
                     service_stats["services"][key]["by_operation"] = {}
 
-        # Get memory counts (long-term from configured backend; sessions/wm from Firebolt)
+        # Get memory counts (long-term from configured backend; sessions/wm from same backend via stores)
         try:
             repo = get_memory_repository()
             ltm_count = repo.count_total(include_deleted=False)
 
-            sessions_result = db.execute(
-                "SELECT COUNT(*) FROM session_contexts"
-            )
-            session_count = sessions_result[0][0] if sessions_result else 0
+            session_store = get_session_store()
+            wm_store = get_working_memory_store()
+            session_count = session_store.count_all()
+            wm_items = wm_store.count_all()
+            wm_tokens = wm_store.sum_tokens_all()
 
-            wm_result = db.execute(
-                "SELECT COUNT(*) FROM working_memory_items"
-            )
-            wm_items = wm_result[0][0] if wm_result else 0
-
-            tokens_result = db.execute(
-                "SELECT COALESCE(SUM(token_count), 0) FROM working_memory_items"
-            )
-            wm_tokens = tokens_result[0][0] if tokens_result else 0
-
-            access_result = db.execute(
-                "SELECT COUNT(*) FROM memory_access_log"
-            )
-            access_log_count = access_result[0][0] if access_result else 0
-
-            # Category breakdown and top_accessed: use DB when Firebolt backend; else skip (Elastic path)
+            # access_log and storage_stats: Firebolt-only (same DB as service_metrics)
+            access_log_count = 0
             by_category = {}
             top_accessed = []
-            if config.vector_backend == "firebolt":
-                category_result = db.execute("""
-                    SELECT memory_category, COUNT(*) as cnt
-                    FROM long_term_memories
-                    WHERE deleted_at IS NULL
-                    GROUP BY memory_category
-                """)
-                by_category = {row[0]: row[1] for row in category_result}
-                top_accessed = db.execute("""
-                    SELECT memory_id, memory_category, access_count, importance, content
-                    FROM long_term_memories
-                    WHERE deleted_at IS NULL
-                    ORDER BY access_count DESC
-                    LIMIT 5
-                """)
-
-            # Get storage sizes from SHOW TABLES
-            # Include all LAML tables for accurate total
-            LAML_TABLES = [
-                'long_term_memories',
-                'working_memory_items',
-                'session_contexts',
-                'memory_access_log',
-                'memory_relationships',  # Join table for memory linking
-                'tool_error_log',        # Error tracking
-                'service_metrics',       # Ollama/embedding metrics (if exists)
-            ]
-            storage_stats = {"total_compressed": 0, "total_uncompressed": 0, "tables": {}}
+            storage_stats = {
+                "total_compressed": 0,
+                "total_uncompressed": 0,
+                "tables": {},
+                "total_compressed_formatted": "0 B",
+                "total_uncompressed_formatted": "0 B",
+            }
+            # Category breakdown and top accessed: use backend-agnostic repository helpers
             try:
-                tables_result = db.execute("SHOW TABLES")
-                # SHOW TABLES columns (Firebolt Core):
-                # 0=table_name, 1=table_type, 2=column_count, 3=primary_index, 4=create_statement,
-                # 5=number_of_rows, 6=size_compressed, 7=size_uncompressed, 8=compression_ratio, 9=?
-                for row in tables_result:
-                    table_name = row[0]
-                    if table_name in LAML_TABLES:
-                        row_count = int(row[5]) if row[5] else 0
-                        compressed = row[6] if row[6] else "0 B"
-                        uncompressed = row[7] if row[7] else "0 B"
+                by_category = getattr(repo, "get_category_counts")()
+            except Exception:
+                by_category = {}
+            try:
+                raw_top = getattr(repo, "get_top_accessed")(limit=5)
+                top_accessed = [
+                    (
+                        row["memory_id"],
+                        row.get("memory_category") or row.get("category") or "",
+                        row.get("access_count", 0),
+                        row.get("importance", 0.0),
+                        row.get("content", ""),
+                    )
+                    for row in raw_top
+                ]
+            except Exception:
+                top_accessed = []
 
-                        # Parse size strings like "75.70 KiB" to bytes
-                        def parse_size(size_str):
-                            if not size_str or size_str == "0.00 B":
-                                return 0
-                            parts = size_str.split()
-                            if len(parts) != 2:
-                                return 0
-                            value = float(parts[0])
-                            unit = parts[1].upper()
-                            multipliers = {"B": 1, "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3}
-                            return int(value * multipliers.get(unit, 1))
+            if config.vector_backend == "firebolt":
+                access_result = db.execute(
+                    "SELECT COUNT(*) FROM memory_access_log"
+                )
+                access_log_count = access_result[0][0] if access_result else 0
 
-                        comp_bytes = parse_size(compressed)
-                        uncomp_bytes = parse_size(uncompressed)
+            # Get storage sizes for the active backend.
+            storage_stats = {"total_compressed": 0, "total_uncompressed": 0, "tables": {}}
+            if config.vector_backend == "firebolt":
+                try:
+                    LAML_TABLES = [
+                        "long_term_memories",
+                        "working_memory_items",
+                        "session_contexts",
+                        "memory_access_log",
+                        "memory_relationships",  # Join table for memory linking
+                        "tool_error_log",        # Error tracking
+                        "service_metrics",       # Ollama/embedding metrics (if exists)
+                    ]
+                    tables_result = db.execute("SHOW TABLES")
+                    # SHOW TABLES columns (Firebolt Core):
+                    # 0=table_name, 1=table_type, 2=column_count, 3=primary_index, 4=create_statement,
+                    # 5=number_of_rows, 6=size_compressed, 7=size_uncompressed, 8=compression_ratio, 9=?
+                    for row in tables_result:
+                        table_name = row[0]
+                        if table_name in LAML_TABLES:
+                            row_count = int(row[5]) if row[5] else 0
+                            compressed = row[6] if row[6] else "0 B"
+                            uncompressed = row[7] if row[7] else "0 B"
 
-                        storage_stats["tables"][table_name] = {
-                            "rows": row_count,
-                            "compressed": compressed,
-                            "compressed_bytes": comp_bytes,
-                            "uncompressed": uncompressed,
-                            "uncompressed_bytes": uncomp_bytes,
-                        }
-                        storage_stats["total_compressed"] += comp_bytes
-                        storage_stats["total_uncompressed"] += uncomp_bytes
-            except Exception as e:
-                storage_stats["error"] = str(e)
+                            # Parse size strings like "75.70 KiB" to bytes
+                            def parse_size(size_str):
+                                if not size_str or size_str == "0.00 B":
+                                    return 0
+                                parts = size_str.split()
+                                if len(parts) != 2:
+                                    return 0
+                                value = float(parts[0])
+                                unit = parts[1].upper()
+                                multipliers = {"B": 1, "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3}
+                                return int(value * multipliers.get(unit, 1))
+
+                            comp_bytes = parse_size(compressed)
+                            uncomp_bytes = parse_size(uncompressed)
+
+                            storage_stats["tables"][table_name] = {
+                                "rows": row_count,
+                                "compressed": compressed,
+                                "compressed_bytes": comp_bytes,
+                                "uncompressed": uncompressed,
+                                "uncompressed_bytes": uncomp_bytes,
+                            }
+                            storage_stats["total_compressed"] += comp_bytes
+                            storage_stats["total_uncompressed"] += uncomp_bytes
+                except Exception as e:
+                    storage_stats["error"] = str(e)
+            elif config.vector_backend == "elastic":
+                # Approximate storage size from Elasticsearch index stats
+                try:
+                    get_bytes = getattr(repo, "get_storage_bytes", None)
+                    total_bytes = int(get_bytes()) if get_bytes is not None else 0
+                    storage_stats["tables"]["elastic_long_term_memories"] = {
+                        "rows": ltm_count,
+                        "compressed": "",  # filled in after format_size
+                        "compressed_bytes": total_bytes,
+                        "uncompressed": "",
+                        "uncompressed_bytes": total_bytes,
+                    }
+                    storage_stats["total_compressed"] = total_bytes
+                    storage_stats["total_uncompressed"] = total_bytes
+                except Exception as e:
+                    storage_stats["error"] = str(e)
+            else:
+                # Other backends: explicitly mark metric as not available
+                storage_stats["note"] = (
+                    f"Storage size reporting is only implemented for Firebolt and Elasticsearch. "
+                    f"Active backend: {config.vector_backend}."
+                )
 
             # Format total sizes
             def format_size(bytes_val):
@@ -389,6 +418,77 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
 
     def handle_config(self):
         """Get LAML configuration (vector backend, brain location, etc)."""
+        payload = {
+            "vector_backend": config.vector_backend,
+            "brain_location": "local" if config.firebolt.use_core else "cloud",
+            "firebolt": {
+                "use_core": config.firebolt.use_core,
+                "core_url": config.firebolt.core_url if config.firebolt.use_core else None,
+                "account_name": config.firebolt.account_name if not config.firebolt.use_core else None,
+                "database": config.firebolt.database,
+            },
+            "ollama": {
+                "host": config.ollama.host,
+                "model": config.ollama.model,
+                "embedding_model": config.ollama.embedding_model,
+            },
+        }
+        if config.vector_backend == "elastic":
+            payload["elastic"] = {
+                "url": config.elastic.url,
+                "index_name": config.elastic.index_name,
+            }
+        if config.vector_backend == "clickhouse":
+            payload["clickhouse"] = {
+                "host": config.clickhouse.host,
+                "port": config.clickhouse.port,
+                "database": config.clickhouse.database,
+                "table_name": config.clickhouse.table_name,
+            }
+        self.send_json(payload)
+
+    def handle_vector_backend(self, query):
+        """
+        Get or update the active vector backend.
+
+        - GET /api/vector-backend          -> current backend + config
+        - GET /api/vector-backend?backend=elastic|firebolt|clickhouse
+          -> switch backend at runtime (and ensure basic target setup) then return updated config.
+        """
+        backend_vals = query.get("backend", [])
+        if not backend_vals:
+            # Just return current config
+            self.handle_config()
+            return
+
+        new_backend = backend_vals[0].strip().lower()
+        if new_backend not in ("firebolt", "elastic", "clickhouse"):
+            self.send_json({"error": f"Invalid backend '{new_backend}'"}, 400)
+            return
+
+        # Best-effort setup for target backend (indexes/tables), without blocking on failures.
+        try:
+            if new_backend == "elastic":
+                # Ensure ES index exists
+                from scripts.init_elastic_index import main as init_elastic_index_main  # type: ignore
+
+                init_elastic_index_main()
+            elif new_backend == "clickhouse":
+                # Ensure ClickHouse table exists
+                from scripts.init_clickhouse import main as init_clickhouse_main  # type: ignore
+
+                init_clickhouse_main()
+            else:
+                # Firebolt backend uses existing schema.sql and migrate.py; nothing to do here.
+                pass
+        except Exception as e:
+            # Log but don't abort the switch; UI can surface the error if needed.
+            print(f"[handle_vector_backend] setup for {new_backend} failed: {e}")
+
+        # Update in-memory config so subsequent calls use the new backend.
+        config.vector_backend = new_backend
+
+        # Return updated config so the UI can immediately reflect the change.
         payload = {
             "vector_backend": config.vector_backend,
             "brain_location": "local" if config.firebolt.use_core else "cloud",

@@ -196,3 +196,43 @@ class ClickHouseMemoryRepository:
             f"ALTER TABLE {self._full_table()} UPDATE access_count = access_count + 1, last_accessed = now() WHERE memory_id = {{mid:String}}",
             parameters={"mid": memory_id},
         )
+
+    def get_category_counts(self) -> Dict[str, int]:
+        """
+        Return counts per memory_category (non-deleted) from ClickHouse.
+        """
+        q = f"""
+            SELECT memory_category, count() AS cnt
+            FROM {self._full_table()}
+            WHERE deleted_at IS NULL
+            GROUP BY memory_category
+        """
+        result = self._client.query(q)
+        buckets = result.result_rows
+        return {row[0]: int(row[1]) for row in buckets}
+
+    def get_top_accessed(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Return top accessed memories from ClickHouse.
+        """
+        q = f"""
+            SELECT memory_id, memory_category, access_count, importance, content
+            FROM {self._full_table()}
+            WHERE deleted_at IS NULL
+            ORDER BY access_count DESC
+            LIMIT {int(limit)}
+        """
+        result = self._client.query(q)
+        rows = result.result_rows
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            out.append(
+                {
+                    "memory_id": row[0],
+                    "memory_category": row[1],
+                    "access_count": row[2],
+                    "importance": row[3],
+                    "content": row[4],
+                }
+            )
+        return out

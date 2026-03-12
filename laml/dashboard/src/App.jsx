@@ -5,7 +5,8 @@ import {
 } from 'recharts'
 
 // API endpoint for stats (via LAML HTTP bridge). Set VITE_API_URL in .env (e.g. http://localhost:8082).
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8082').replace(/\/$/, '') + '/api'
+const RAW_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8082'
+const API_BASE = RAW_BASE.replace(/\/$/, '') + '/api'
 
 // Mock data for initial render (before API connected)
 const MOCK_STATS = {
@@ -69,13 +70,13 @@ const MOCK_STATS = {
   }
 }
 
-// Color palette
+// Color palette – mapped to CSS variables for dark analytics theme
 const COLORS = {
-  fire: '#F72A30',
-  cyan: '#F72A30',
-  purple: '#AC2422',
-  green: '#FF4848',
-  yellow: '#ffd60a',
+  fire: 'var(--accent-fire)',          // primary orange
+  cyan: 'var(--accent-cyan)',          // luminous green
+  purple: 'var(--accent-purple)',      // desaturated violet for secondary accents
+  green: 'var(--accent-green)',        // luminous green
+  yellow: 'var(--accent-yellow)',
 }
 
 const CATEGORY_COLORS = {
@@ -1002,38 +1003,49 @@ function MemoryDistribution({ data, delay = 0 }) {
     color: CATEGORY_COLORS[name] || COLORS.fire
   }))
 
+  const total = chartData.reduce((sum, item) => sum + item.value, 0)
+
   return (
     <div className="chart-card animate-slide-up" style={{ animationDelay: `${delay}ms` }}>
       <h3 className="chart-title">Memory by Category</h3>
-      <ResponsiveContainer width="100%" height={200}>
-        <PieChart>
-          <Pie
-            data={chartData}
-            cx="50%"
-            cy="50%"
-            innerRadius={50}
-            outerRadius={80}
-            paddingAngle={2}
-            dataKey="value"
-          >
-            {chartData.map((entry, index) => (
-              <Cell key={index} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              background: '#F5EBEB',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '8px'
-            }}
-          />
-          <Legend
-            verticalAlign="bottom"
-            iconType="circle"
-            formatter={(value) => <span style={{ color: '#8888a0', fontSize: '12px' }}>{value}</span>}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+      {total === 0 ? (
+        <div className="chart-empty">
+          <span className="chart-empty-title">No memory data yet</span>
+          <span className="chart-empty-hint">
+            Use LAML tools in Cursor or run the seed script to add long-term memories.
+          </span>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              innerRadius={50}
+              outerRadius={80}
+              paddingAngle={2}
+              dataKey="value"
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={index} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                background: '#F5EBEB',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px'
+              }}
+            />
+            <Legend
+              verticalAlign="bottom"
+              iconType="circle"
+              formatter={(value) => <span style={{ color: '#8888a0', fontSize: '12px' }}>{value}</span>}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      )}
     </div>
   )
 }
@@ -1252,23 +1264,38 @@ const fetchStats = useCallback(async () => {
       <header className="dashboard-header">
         <div className="header-left">
           <h1 className="logo">
-            <span className="logo-icon">🔥</span>
-            LAML Dashboard
+            <span className="logo-icon">
+              <img src="/assets/tpc-logo-16bit-pink.png" alt="TechPonyClub logo" />
+            </span>
+            TechPonyClub · LAML
           </h1>
-          <span className="logo-subtitle">Local Agent Memory Layer</span>
+          <span className="logo-subtitle">Local Agent Memory Layer Dashboard</span>
         </div>
         <div className="header-right">
           {brainConfig && (
-            <div className={`brain-location ${brainConfig.brain_location}`}>
-              <span className="brain-icon">{brainConfig.brain_location === 'local' ? '🏠' : '☁️'}</span>
-              <span className="brain-label">
-                {brainConfig.brain_location === 'local' ? 'Local Vector DB' : 'Cloud'}
-              </span>
-              <span className="brain-detail">
-                {brainConfig.brain_location === 'local'
-                  ? brainConfig.firebolt.core_url
-                  : brainConfig.firebolt.account_name}
-              </span>
+            <div className="backend-selector">
+              <label className="backend-label">
+                Vector Backend:
+                <select
+                  value={brainConfig.vector_backend || 'firebolt'}
+                  onChange={async (e) => {
+                    const backend = e.target.value
+                    try {
+                      const res = await fetch(`${API_BASE}/vector-backend?backend=${backend}`)
+                      if (res.ok) {
+                        const updated = await res.json()
+                        setBrainConfig(updated)
+                      }
+                    } catch (err) {
+                      console.error('Failed to switch backend', err)
+                    }
+                  }}
+                >
+                  <option value="firebolt">Firebolt</option>
+                  <option value="elastic">Elasticsearch</option>
+                  <option value="clickhouse">ClickHouse</option>
+                </select>
+              </label>
             </div>
           )}
           <div className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
@@ -1344,8 +1371,19 @@ const fetchStats = useCallback(async () => {
           />
           <StatCard
             title="Memory Data Size"
-            value={safeStats.memory?.storage?.total_uncompressed_formatted || '0 B'}
-            subtitle={`Raw data size before compression · ${safeStats.memory?.storage?.total_compressed_formatted || '0 B'} actual disk usage`}
+            value={
+              safeStats.memory?.storage?.total_uncompressed_formatted ||
+              (brainConfig?.vector_backend && brainConfig.vector_backend !== 'firebolt'
+                ? `N/A (${brainConfig.vector_backend})`
+                : '0 B')
+            }
+            subtitle={
+              brainConfig?.vector_backend && brainConfig.vector_backend !== 'firebolt'
+                ? `Storage sizing is currently only implemented for Firebolt. Active backend: ${brainConfig.vector_backend}.`
+                : `Raw data size before compression · ${
+                    safeStats.memory?.storage?.total_compressed_formatted || '0 B'
+                  } actual disk usage`
+            }
             icon="💾"
             color="green"
             delay={250}
@@ -1431,6 +1469,7 @@ const fetchStats = useCallback(async () => {
         .dashboard {
           min-height: 100vh;
           padding: 0 24px 48px;
+          font-family: var(--font-body);
         }
 
         .dashboard-header {
@@ -1438,7 +1477,7 @@ const fetchStats = useCallback(async () => {
           justify-content: space-between;
           align-items: center;
           padding: 24px 0;
-          border-bottom: 1px solid var(--border-subtle);
+          border-bottom: 1px solid var(--accent-line);
           margin-bottom: 32px;
         }
 
@@ -1448,9 +1487,9 @@ const fetchStats = useCallback(async () => {
           gap: 4px;
           padding: 12px 20px;
           margin-bottom: 24px;
-          background: rgba(255, 152, 0, 0.1);
-          border: 1px solid rgba(255, 152, 0, 0.4);
-          border-radius: 12px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
           font-size: 13px;
           color: var(--text-primary);
         }
@@ -1466,10 +1505,10 @@ const fetchStats = useCallback(async () => {
           gap: 16px;
           padding: 16px 20px;
           margin-bottom: 24px;
-          background: linear-gradient(135deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.1));
-          border: 1px solid rgba(255, 193, 7, 0.4);
-          border-radius: 12px;
-          animation: pulse-warning 2s ease-in-out infinite;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          box-shadow: 0 0 0 1px rgba(245, 230, 99, 0.2);
         }
 
         @keyframes pulse-warning {
@@ -1504,12 +1543,12 @@ const fetchStats = useCallback(async () => {
         }
 
         .restart-warning .restart-command {
-          background: rgba(0, 0, 0, 0.2);
-          padding: 8px 12px;
-          border-radius: 6px;
+          background: rgba(0, 0, 0, 0.5);
+          padding: 6px 10px;
+          border-radius: 4px;
           font-size: 10px;
           color: var(--text-muted);
-          max-width: 400px;
+          max-width: 100%;
           overflow-x: auto;
           white-space: nowrap;
         }
@@ -1521,15 +1560,27 @@ const fetchStats = useCallback(async () => {
         }
 
         .logo {
-          font-size: 28px;
+          font-size: 24px;
           font-weight: 700;
           display: flex;
           align-items: center;
           gap: 12px;
+          font-family: var(--font-mono);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
         }
 
         .logo-icon {
-          font-size: 32px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .logo-icon img {
+          width: 32px;
+          height: 32px;
+          image-rendering: pixelated;
+          display: block;
         }
 
         .logo-subtitle {
@@ -1622,10 +1673,10 @@ const fetchStats = useCallback(async () => {
         }
 
         .stat-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: 24px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          padding: 20px;
           display: flex;
           align-items: flex-start;
           gap: 16px;
@@ -1678,10 +1729,13 @@ const fetchStats = useCallback(async () => {
 
         /* Sections */
         .section-title {
-          font-size: 18px;
+          font-size: 16px;
           font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 20px;
+          color: var(--text-secondary);
+          margin-bottom: 16px;
+          font-family: var(--font-mono);
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
         }
 
         /* Services Section */
@@ -1712,10 +1766,10 @@ const fetchStats = useCallback(async () => {
         }
 
         .service-panel {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: 20px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          padding: 18px 18px 16px;
         }
 
         /* Data Flow Diagram - SVG-based Layout */
@@ -1724,9 +1778,9 @@ const fetchStats = useCallback(async () => {
         }
 
         .dataflow-container {
-          background: linear-gradient(135deg, rgba(247, 42, 48, 0.03), rgba(247, 42, 48, 0.03));
-          border: 1px solid rgba(26, 4, 4, 0.1);
-          border-radius: 16px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
           padding: 40px;
           position: relative;
           overflow: hidden;
@@ -1740,13 +1794,12 @@ const fetchStats = useCallback(async () => {
           position: absolute;
           top: 20px;
           left: 20px;
-          background: rgba(255, 255, 255, 0.95);
-          border: 1px solid rgba(26, 4, 4, 0.12);
-          border-radius: 12px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
           padding: 16px;
           z-index: 10;
           max-width: 320px;
-          backdrop-filter: blur(8px);
         }
 
         .flow-steps-legend .legend-title {
@@ -1768,7 +1821,7 @@ const fetchStats = useCallback(async () => {
           display: flex;
           align-items: center;
           gap: 10px;
-          font-size: 12px;
+          font-size: 13px;
           color: var(--text-secondary);
           line-height: 1.4;
         }
@@ -1809,13 +1862,12 @@ const fetchStats = useCallback(async () => {
           position: absolute;
           top: 20px;
           right: 20px;
-          background: rgba(255, 255, 255, 0.95);
-          border: 1px solid rgba(172, 36, 34, 0.3);
-          border-radius: 12px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
           padding: 16px;
           z-index: 10;
           max-width: 320px;
-          backdrop-filter: blur(8px);
         }
 
         .flow-steps-legend-right .legend-title {
@@ -1944,11 +1996,11 @@ const fetchStats = useCallback(async () => {
           stroke-linejoin: round;
         }
 
-        /* Flow Nodes - Light mode */
+        /* Flow Nodes - dark 8-bit style */
         .flow-node {
-          background: rgba(255, 255, 255, 0.98);
-          border: 2px solid rgba(26, 4, 4, 0.15);
-          border-radius: 12px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
           padding: 20px 24px;
           text-align: center;
           position: absolute;
@@ -1956,7 +2008,7 @@ const fetchStats = useCallback(async () => {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 16px rgba(26, 4, 4, 0.08);
+          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
           gap: 8px;
         }
 
@@ -2029,6 +2081,7 @@ const fetchStats = useCallback(async () => {
           font-family: var(--font-mono);
           margin-top: 2px;
           word-break: break-all;
+          max-width: 100%;
         }
 
 
@@ -2272,29 +2325,50 @@ const fetchStats = useCallback(async () => {
         }
 
         .chart-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: 20px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          padding: 18px;
         }
 
         .chart-title {
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
-          margin-bottom: 16px;
+          margin-bottom: 14px;
+          font-family: var(--font-mono);
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+        }
+
+        .chart-empty {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 24px 16px;
+          font-family: var(--font-mono);
+        }
+
+        .chart-empty-title {
+          font-size: 12px;
+          color: var(--text-secondary);
+        }
+
+        .chart-empty-hint {
+          font-size: 11px;
+          color: var(--text-muted);
         }
 
         /* Calls Table */
         .calls-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: 20px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          padding: 18px;
         }
 
         .calls-table {
           font-family: var(--font-mono);
-          font-size: 12px;
+          font-size: 13px;
         }
 
         .calls-header {
@@ -2303,9 +2377,9 @@ const fetchStats = useCallback(async () => {
           gap: 8px;
           padding-bottom: 12px;
           border-bottom: 1px solid var(--border-subtle);
-          color: var(--text-muted);
+          color: var(--text-secondary);
           text-transform: uppercase;
-          font-size: 10px;
+          font-size: 11px;
           letter-spacing: 0.5px;
         }
 
@@ -2353,6 +2427,7 @@ const fetchStats = useCallback(async () => {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          max-width: 100%;
         }
 
         .call-latency {
@@ -2370,10 +2445,10 @@ const fetchStats = useCallback(async () => {
 
         /* Top Accessed */
         .top-accessed {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: 20px;
+          background: #050608;
+          border: 1px solid var(--accent-line);
+          border-radius: 4px;
+          padding: 18px;
         }
 
         .memory-list {
@@ -2387,8 +2462,8 @@ const fetchStats = useCallback(async () => {
           flex-direction: column;
           gap: 8px;
           padding: 14px 16px;
-          background: var(--bg-secondary);
-          border-radius: 8px;
+          background: #050608;
+          border-radius: 4px;
         }
 
         .memory-header {
@@ -2412,6 +2487,7 @@ const fetchStats = useCallback(async () => {
           line-height: 1.5;
           color: var(--text-primary);
           word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         .memory-access {

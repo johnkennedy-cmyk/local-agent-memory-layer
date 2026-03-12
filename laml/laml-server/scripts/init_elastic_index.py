@@ -67,6 +67,46 @@ def build_index_body(dimension: int) -> dict:
     }
 
 
+def build_sessions_index_body() -> dict:
+    """Build index mapping for laml_sessions."""
+    return {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "session_id": {"type": "keyword"},
+                "user_id": {"type": "keyword"},
+                "org_id": {"type": "keyword"},
+                "total_tokens": {"type": "integer"},
+                "max_tokens": {"type": "integer"},
+                "created_at": {"type": "date"},
+                "last_activity": {"type": "date"},
+            }
+        },
+    }
+
+
+def build_working_memory_index_body() -> dict:
+    """Build index mapping for laml_working_memory."""
+    return {
+        "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+        "mappings": {
+            "properties": {
+                "item_id": {"type": "keyword"},
+                "session_id": {"type": "keyword"},
+                "user_id": {"type": "keyword"},
+                "content_type": {"type": "keyword"},
+                "content": {"type": "text"},
+                "token_count": {"type": "integer"},
+                "pinned": {"type": "boolean"},
+                "relevance_score": {"type": "float"},
+                "sequence_num": {"type": "integer"},
+                "created_at": {"type": "date"},
+                "last_accessed": {"type": "date"},
+            }
+        },
+    }
+
+
 def main():
     print("LAML - Init Elasticsearch index for long-term memory")
     print("=" * 50)
@@ -76,16 +116,33 @@ def main():
         return 0
 
     client = get_elasticsearch_client()
-    index_name = config.elastic.index_name
     dimension = config.elastic.embedding_dimensions
 
+    # Long-term memories index
+    index_name = config.elastic.index_name
     if client.indices.exists(index=index_name):
         print(f"Index '{index_name}' already exists.")
-        return 0
+    else:
+        body = build_index_body(dimension)
+        client.indices.create(index=index_name, body=body)
+        print(f"Created index '{index_name}' with dense_vector dimension={dimension}.")
 
-    body = build_index_body(dimension)
-    client.indices.create(index=index_name, body=body)
-    print(f"Created index '{index_name}' with dense_vector dimension={dimension}.")
+    # Sessions index (unified backend)
+    sessions_index = config.elastic.sessions_index
+    if client.indices.exists(index=sessions_index):
+        print(f"Index '{sessions_index}' already exists.")
+    else:
+        client.indices.create(index=sessions_index, body=build_sessions_index_body())
+        print(f"Created index '{sessions_index}'.")
+
+    # Working memory index (unified backend)
+    wm_index = config.elastic.working_memory_index
+    if client.indices.exists(index=wm_index):
+        print(f"Index '{wm_index}' already exists.")
+    else:
+        client.indices.create(index=wm_index, body=build_working_memory_index_body())
+        print(f"Created index '{wm_index}'.")
+
     return 0
 
 
