@@ -89,11 +89,14 @@ ollama pull llama3:8b        # For classification
 ollama pull nomic-embed-text  # For embeddings (768 dimensions)
 ```
 
-### Step 2: Install a local vector database
+### Step 2: Choose your vector backend (local or cloud)
 
-The current implementation in this fork still uses **Firebolt Core** as the default local vector database, but the goal is to support multiple local backends (e.g., Firebolt Core, Elasticsearch, and others).
+LAML is optimized for a local-first setup, but cloud vector backends are fully supported.
 
-If you want to use Firebolt Core today, follow these steps:
+- **Local default:** Firebolt Core
+- **Cloud recommended:** Turbopuffer (configured, tested, and known to work in this repo)
+
+If you want to use the default local Firebolt Core backend today, follow these steps:
 
 ```bash
 # Install Firebolt Core using the official installer
@@ -108,7 +111,7 @@ curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"
 
 Firebolt Core runs at `http://localhost:3473` by default.
 
-> In future iterations of LAML, this section will be extended with alternative setup instructions for other local vector databases such as Elasticsearch.
+If you want cloud instead, skip Firebolt Core install and set `LAML_VECTOR_BACKEND=turbopuffer` in Step 4.
 
 ### Step 3: Clone and Set Up LAML
 
