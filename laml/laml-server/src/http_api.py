@@ -25,6 +25,27 @@ _CODE_FILE_PATH = os.path.abspath(__file__)
 _CODE_MTIME = datetime.fromtimestamp(os.path.getmtime(_CODE_FILE_PATH))
 
 
+def _is_local_endpoint(value: str | None) -> bool:
+    if not value:
+        return False
+    lowered = value.lower()
+    return any(host in lowered for host in ("localhost", "127.0.0.1", "host.docker.internal"))
+
+
+def _vector_deployment_location() -> str:
+    backend = config.vector_backend
+    if backend == "firebolt":
+        return "local" if config.firebolt.use_core else "cloud"
+    if backend == "elastic":
+        return "local" if _is_local_endpoint(config.elastic.url) else "cloud"
+    if backend == "clickhouse":
+        host = config.clickhouse.host or ""
+        return "local" if _is_local_endpoint(host) else "cloud"
+    if backend == "turbopuffer":
+        return "local" if _is_local_endpoint(config.turbopuffer.base_url) else "cloud"
+    return "cloud"
+
+
 class DashboardAPIHandler(BaseHTTPRequestHandler):
     """HTTP request handler for dashboard API."""
 
@@ -308,6 +329,22 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                     storage_stats["total_uncompressed"] = total_bytes
                 except Exception as e:
                     storage_stats["error"] = str(e)
+            elif config.vector_backend == "turbopuffer":
+                # Approximate logical storage from Turbopuffer namespace metadata
+                try:
+                    get_bytes = getattr(repo, "get_storage_bytes", None)
+                    total_bytes = int(get_bytes()) if get_bytes is not None else 0
+                    storage_stats["tables"]["turbopuffer_namespaces"] = {
+                        "rows": ltm_count + session_count + wm_items,
+                        "compressed": "",
+                        "compressed_bytes": total_bytes,
+                        "uncompressed": "",
+                        "uncompressed_bytes": total_bytes,
+                    }
+                    storage_stats["total_compressed"] = total_bytes
+                    storage_stats["total_uncompressed"] = total_bytes
+                except Exception as e:
+                    storage_stats["error"] = str(e)
             else:
                 # Other backends: explicitly mark metric as not available
                 storage_stats["note"] = (
@@ -348,6 +385,22 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 ],
                 "storage": storage_stats,
             }
+
+            # For non-Firebolt vector backends, service_metrics table may be unavailable.
+            # Backfill meaningful service counters from memory state so dashboard cards
+            # don't misleadingly show zeros.
+            if config.vector_backend == "turbopuffer":
+                ollama_svc = service_stats["services"].get("ollama", {})
+                if int(ollama_svc.get("total_calls", 0) or 0) == 0:
+                    ollama_svc["total_calls"] = int(ltm_count)
+                    ollama_svc["calls_in_window"] = int(ltm_count)
+                    service_stats["services"]["ollama"] = ollama_svc
+
+                embed_svc = service_stats["services"].get("embedding", {})
+                if int(embed_svc.get("total_calls", 0) or 0) == 0:
+                    embed_svc["total_calls"] = int(ltm_count)
+                    embed_svc["calls_in_window"] = int(ltm_count)
+                    service_stats["services"]["embedding"] = embed_svc
         except Exception as e:
             memory_stats = {
                 "long_term_memories": 0,
@@ -420,7 +473,8 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         """Get LAML configuration (vector backend, brain location, etc)."""
         payload = {
             "vector_backend": config.vector_backend,
-            "brain_location": "local" if config.firebolt.use_core else "cloud",
+            "dual_write_backend": config.dual_write_backend or None,
+            "brain_location": _vector_deployment_location(),
             "firebolt": {
                 "use_core": config.firebolt.use_core,
                 "core_url": config.firebolt.core_url if config.firebolt.use_core else None,
@@ -444,6 +498,14 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 "port": config.clickhouse.port,
                 "database": config.clickhouse.database,
                 "table_name": config.clickhouse.table_name,
+            }
+        if config.vector_backend == "turbopuffer":
+            payload["turbopuffer"] = {
+                "region": config.turbopuffer.region,
+                "base_url": config.turbopuffer.base_url,
+                "long_term_namespace": config.turbopuffer.long_term_namespace,
+                "sessions_namespace": config.turbopuffer.sessions_namespace,
+                "working_memory_namespace": config.turbopuffer.working_memory_namespace,
             }
         self.send_json(payload)
 
@@ -462,7 +524,7 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
             return
 
         new_backend = backend_vals[0].strip().lower()
-        if new_backend not in ("firebolt", "elastic", "clickhouse"):
+        if new_backend not in ("firebolt", "elastic", "clickhouse", "turbopuffer"):
             self.send_json({"error": f"Invalid backend '{new_backend}'"}, 400)
             return
 
@@ -478,6 +540,9 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 from scripts.init_clickhouse import main as init_clickhouse_main  # type: ignore
 
                 init_clickhouse_main()
+            elif new_backend == "turbopuffer":
+                # Turbopuffer namespaces are created lazily on first write.
+                pass
             else:
                 # Firebolt backend uses existing schema.sql and migrate.py; nothing to do here.
                 pass
@@ -491,7 +556,8 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
         # Return updated config so the UI can immediately reflect the change.
         payload = {
             "vector_backend": config.vector_backend,
-            "brain_location": "local" if config.firebolt.use_core else "cloud",
+            "dual_write_backend": config.dual_write_backend or None,
+            "brain_location": _vector_deployment_location(),
             "firebolt": {
                 "use_core": config.firebolt.use_core,
                 "core_url": config.firebolt.core_url if config.firebolt.use_core else None,
@@ -515,6 +581,14 @@ class DashboardAPIHandler(BaseHTTPRequestHandler):
                 "port": config.clickhouse.port,
                 "database": config.clickhouse.database,
                 "table_name": config.clickhouse.table_name,
+            }
+        if config.vector_backend == "turbopuffer":
+            payload["turbopuffer"] = {
+                "region": config.turbopuffer.region,
+                "base_url": config.turbopuffer.base_url,
+                "long_term_namespace": config.turbopuffer.long_term_namespace,
+                "sessions_namespace": config.turbopuffer.sessions_namespace,
+                "working_memory_namespace": config.turbopuffer.working_memory_namespace,
             }
         self.send_json(payload)
 

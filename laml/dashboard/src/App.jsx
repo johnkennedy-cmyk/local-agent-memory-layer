@@ -7,6 +7,7 @@ import {
 // API endpoint for stats (via LAML HTTP bridge). Set VITE_API_URL in .env (e.g. http://localhost:8082).
 const RAW_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8082'
 const API_BASE = RAW_BASE.replace(/\/$/, '') + '/api'
+const TURBOPUFFER_DASHBOARD_URL = 'https://turbopuffer.com/dashboard/'
 
 // Mock data for initial render (before API connected)
 const MOCK_STATS = {
@@ -141,23 +142,28 @@ function DataFlowDiagram({ config, delay = 0 }) {
   const ollamaHost = config?.ollama?.host || 'localhost:11434'
   const vectorBackend = config?.vector_backend || 'firebolt'
 
-  // Vector backend label + URL based on current config (firebolt, elastic, or clickhouse)
+  // Vector backend label + URL based on current config.
   const vectorBackendLabel =
     vectorBackend === 'elastic'
       ? 'Elasticsearch'
       : vectorBackend === 'clickhouse'
       ? 'ClickHouse'
+      : vectorBackend === 'turbopuffer'
+      ? 'Turbopuffer'
       : 'Firebolt'
 
-  const vectorLocation = config?.brain_location === 'local' ? 'Local Vector DB' : 'Remote Vector DB'
+  const vectorLocation = config?.brain_location === 'local' ? 'Local Deployment' : 'Cloud Deployment'
 
   let vectorUrl = ''
+  const showVectorDashboardLink = vectorBackend === 'turbopuffer'
   if (vectorBackend === 'elastic') {
     vectorUrl = config?.elastic?.url || 'http://localhost:9200'
   } else if (vectorBackend === 'clickhouse') {
     const host = config?.clickhouse?.host || 'localhost'
     const port = config?.clickhouse?.port || 8123
     vectorUrl = `${host}:${port}`
+  } else if (vectorBackend === 'turbopuffer') {
+    vectorUrl = config?.turbopuffer?.base_url || 'https://gcp-us-central1.turbopuffer.com'
   } else {
     vectorUrl = config?.firebolt?.use_core
       ? config?.firebolt?.core_url
@@ -167,12 +173,18 @@ function DataFlowDiagram({ config, delay = 0 }) {
   // Database MCP node label/URL should follow the active vector backend as well
   let dbMcpLabel = 'Database MCP'
   let dbMcpUrl = ''
+  let dbMcpAction = 'Direct DB Queries'
+  const usesDbMcp = vectorBackend !== 'turbopuffer'
   if (vectorBackend === 'elastic') {
     dbMcpLabel = 'DB MCP (Elasticsearch)'
     dbMcpUrl = 'docker.elastic.co/mcp/elasticsearch (stdio via Cursor)'
   } else if (vectorBackend === 'clickhouse') {
     dbMcpLabel = 'DB MCP (ClickHouse)'
     dbMcpUrl = 'mcp/clickhouse (docker)'
+  } else if (vectorBackend === 'turbopuffer') {
+    dbMcpLabel = 'No DB MCP (Turbopuffer)'
+    dbMcpUrl = 'LAML connects to Turbopuffer via HTTPS API'
+    dbMcpAction = 'No direct DB MCP path'
   } else {
     dbMcpLabel = 'DB MCP (Firebolt)'
     dbMcpUrl = 'localhost:8080/sse'
@@ -283,17 +295,33 @@ function DataFlowDiagram({ config, delay = 0 }) {
 
         {/* Database MCP Flow Legend (Right) */}
         <div className="flow-steps-legend-right">
-          <div className="legend-title">Database MCP Flow (Parallel)</div>
-          <div className="legend-subtitle">Direct DB Access - Independent of LAML</div>
+          <div className="legend-title">
+            {usesDbMcp ? 'Database MCP Flow (Parallel)' : 'Database MCP Flow'}
+          </div>
+          <div className="legend-subtitle">
+            {usesDbMcp ? 'Direct DB Access - Independent of LAML' : 'No DB-specific MCP configured for this backend'}
+          </div>
           <div className="legend-description">
-            Cursor uses this for ad-hoc queries, schema exploration, debugging,
-            and raw data access without AI overhead. Works with Firebolt MCP or other DB MCPs.
+            {usesDbMcp
+              ? 'Cursor uses this for ad-hoc queries, schema exploration, debugging, and raw data access without AI overhead. Works with Firebolt MCP or other DB MCPs.'
+              : 'For Turbopuffer, the engine connection is via LAML server HTTP API calls, not a separate DB MCP integration.'}
           </div>
           <div className="legend-steps">
-            <div className="legend-step"><span className="step-num mcp">A</span> Cursor → DB MCP (SQL)</div>
-            <div className="legend-step"><span className="step-num mcp">B</span> DB MCP → DB (Execute)</div>
-            <div className="legend-step"><span className="step-num mcp">C</span> DB → DB MCP (Results)</div>
-            <div className="legend-step"><span className="step-num mcp">D</span> DB MCP → Cursor (Data)</div>
+            {usesDbMcp ? (
+              <>
+                <div className="legend-step"><span className="step-num mcp">A</span> Cursor → DB MCP (SQL)</div>
+                <div className="legend-step"><span className="step-num mcp">B</span> DB MCP → DB (Execute)</div>
+                <div className="legend-step"><span className="step-num mcp">C</span> DB → DB MCP (Results)</div>
+                <div className="legend-step"><span className="step-num mcp">D</span> DB MCP → Cursor (Data)</div>
+              </>
+            ) : (
+              <>
+                <div className="legend-step"><span className="step-num mcp">A</span> Cursor → LAML MCP</div>
+                <div className="legend-step"><span className="step-num mcp">B</span> LAML → Turbopuffer API</div>
+                <div className="legend-step"><span className="step-num mcp">C</span> Turbopuffer → LAML</div>
+                <div className="legend-step"><span className="step-num mcp">D</span> LAML → Cursor</div>
+              </>
+            )}
           </div>
           <div className="legend-use-cases">
             <div className="use-case-title">Use Cases:</div>
@@ -362,103 +390,107 @@ function DataFlowDiagram({ config, delay = 0 }) {
 
           {/* REQUEST FLOWS (downward, cyan) */}
 
-          {/* Cursor → Firebolt MCP Server (right side to top right, straight line) */}
-          <path
-            d={`M ${cursorRightOut.x} ${cursorRightOut.y} L ${fireboltMcpTopRight.x} ${fireboltMcpTopRight.y}`}
-            stroke="#F72A30"
-            strokeWidth="2.5"
-            fill="none"
-            markerEnd="url(#arrowRequest)"
-            className="flow-path request-flow"
-            opacity="0.7"
-          />
-          {/* Step label: A - Cursor → Firebolt MCP (SQL Query) */}
-          <text
-            x={(cursorRightOut.x + fireboltMcpTopRight.x) / 2 + 20}
-            y={(cursorRightOut.y + fireboltMcpTopRight.y) / 2 + 10}
-            fill="#AC2422"
-            fontSize="12"
-            fontWeight="700"
-            textAnchor="middle"
-            className="flow-step-label"
-            opacity="0.9"
-          >
-            A
-          </text>
+          {usesDbMcp && (
+            <>
+              {/* Cursor → Firebolt MCP Server (right side to top right, straight line) */}
+              <path
+                d={`M ${cursorRightOut.x} ${cursorRightOut.y} L ${fireboltMcpTopRight.x} ${fireboltMcpTopRight.y}`}
+                stroke="#F72A30"
+                strokeWidth="2.5"
+                fill="none"
+                markerEnd="url(#arrowRequest)"
+                className="flow-path request-flow"
+                opacity="0.7"
+              />
+              {/* Step label: A - Cursor → Firebolt MCP (SQL Query) */}
+              <text
+                x={(cursorRightOut.x + fireboltMcpTopRight.x) / 2 + 20}
+                y={(cursorRightOut.y + fireboltMcpTopRight.y) / 2 + 10}
+                fill="#AC2422"
+                fontSize="12"
+                fontWeight="700"
+                textAnchor="middle"
+                className="flow-step-label"
+                opacity="0.9"
+              >
+                A
+              </text>
 
-          {/* Firebolt MCP Server → Firebolt Core (bottom left to top left, separated) */}
-          <path
-            d={`M ${fireboltMcpBottomLeft.x} ${fireboltMcpBottomLeft.y} L ${fireboltCoreTopLeft.x} ${fireboltCoreTopLeft.y}`}
-            stroke="#F72A30"
-            strokeWidth="2.5"
-            fill="none"
-            markerEnd="url(#arrowRequest)"
-            className="flow-path request-flow"
-            opacity="0.7"
-          />
-          {/* Step label: B - Firebolt MCP → Core (Execute) */}
-          <text
-            x={(fireboltMcpBottomLeft.x + fireboltCoreTopLeft.x) / 2 - 20}
-            y={(fireboltMcpBottomLeft.y + fireboltCoreTopLeft.y) / 2}
-            fill="#AC2422"
-            fontSize="12"
-            fontWeight="700"
-            textAnchor="middle"
-            className="flow-step-label"
-            opacity="0.9"
-          >
-            B
-          </text>
+              {/* Firebolt MCP Server → Firebolt Core (bottom left to top left, separated) */}
+              <path
+                d={`M ${fireboltMcpBottomLeft.x} ${fireboltMcpBottomLeft.y} L ${fireboltCoreTopLeft.x} ${fireboltCoreTopLeft.y}`}
+                stroke="#F72A30"
+                strokeWidth="2.5"
+                fill="none"
+                markerEnd="url(#arrowRequest)"
+                className="flow-path request-flow"
+                opacity="0.7"
+              />
+              {/* Step label: B - Firebolt MCP → Core (Execute) */}
+              <text
+                x={(fireboltMcpBottomLeft.x + fireboltCoreTopLeft.x) / 2 - 20}
+                y={(fireboltMcpBottomLeft.y + fireboltCoreTopLeft.y) / 2}
+                fill="#AC2422"
+                fontSize="12"
+                fontWeight="700"
+                textAnchor="middle"
+                className="flow-step-label"
+                opacity="0.9"
+              >
+                B
+              </text>
 
-          {/* Firebolt Core → Firebolt MCP Server (top right to bottom right, separated) */}
-          <path
-            d={`M ${fireboltCoreTopRight.x} ${fireboltCoreTopRight.y} L ${fireboltMcpBottomRight.x} ${fireboltMcpBottomRight.y}`}
-            stroke="#FF4848"
-            strokeWidth="2.5"
-            fill="none"
-            markerEnd="url(#arrowResponse)"
-            className="flow-path response-flow"
-            opacity="0.7"
-            strokeDasharray="5,5"
-          />
-          {/* Step label: C - Core → Firebolt MCP (Results) */}
-          <text
-            x={(fireboltCoreTopRight.x + fireboltMcpBottomRight.x) / 2 + 20}
-            y={(fireboltCoreTopRight.y + fireboltMcpBottomRight.y) / 2}
-            fill="#AC2422"
-            fontSize="12"
-            fontWeight="700"
-            textAnchor="middle"
-            className="flow-step-label"
-            opacity="0.9"
-          >
-            C
-          </text>
+              {/* Firebolt Core → Firebolt MCP Server (top right to bottom right, separated) */}
+              <path
+                d={`M ${fireboltCoreTopRight.x} ${fireboltCoreTopRight.y} L ${fireboltMcpBottomRight.x} ${fireboltMcpBottomRight.y}`}
+                stroke="#FF4848"
+                strokeWidth="2.5"
+                fill="none"
+                markerEnd="url(#arrowResponse)"
+                className="flow-path response-flow"
+                opacity="0.7"
+                strokeDasharray="5,5"
+              />
+              {/* Step label: C - Core → Firebolt MCP (Results) */}
+              <text
+                x={(fireboltCoreTopRight.x + fireboltMcpBottomRight.x) / 2 + 20}
+                y={(fireboltCoreTopRight.y + fireboltMcpBottomRight.y) / 2}
+                fill="#AC2422"
+                fontSize="12"
+                fontWeight="700"
+                textAnchor="middle"
+                className="flow-step-label"
+                opacity="0.9"
+              >
+                C
+              </text>
 
-          {/* Firebolt MCP Server → Cursor (top left to right side below, straight line) */}
-          <path
-            d={`M ${fireboltMcpTopLeft.x} ${fireboltMcpTopLeft.y} L ${cursorRightIn.x} ${cursorRightIn.y}`}
-            stroke="#FF4848"
-            strokeWidth="2.5"
-            fill="none"
-            markerEnd="url(#arrowResponse)"
-            className="flow-path response-flow"
-            opacity="0.7"
-            strokeDasharray="5,5"
-          />
-          {/* Step label: D - Firebolt MCP → Cursor (Data) */}
-          <text
-            x={(fireboltMcpTopLeft.x + cursorRightIn.x) / 2 - 20}
-            y={(fireboltMcpTopLeft.y + cursorRightIn.y) / 2 - 10}
-            fill="#AC2422"
-            fontSize="12"
-            fontWeight="700"
-            textAnchor="middle"
-            className="flow-step-label"
-            opacity="0.9"
-          >
-            D
-          </text>
+              {/* Firebolt MCP Server → Cursor (top left to right side below, straight line) */}
+              <path
+                d={`M ${fireboltMcpTopLeft.x} ${fireboltMcpTopLeft.y} L ${cursorRightIn.x} ${cursorRightIn.y}`}
+                stroke="#FF4848"
+                strokeWidth="2.5"
+                fill="none"
+                markerEnd="url(#arrowResponse)"
+                className="flow-path response-flow"
+                opacity="0.7"
+                strokeDasharray="5,5"
+              />
+              {/* Step label: D - Firebolt MCP → Cursor (Data) */}
+              <text
+                x={(fireboltMcpTopLeft.x + cursorRightIn.x) / 2 - 20}
+                y={(fireboltMcpTopLeft.y + cursorRightIn.y) / 2 - 10}
+                fill="#AC2422"
+                fontSize="12"
+                fontWeight="700"
+                textAnchor="middle"
+                className="flow-step-label"
+                opacity="0.9"
+              >
+                D
+              </text>
+            </>
+          )}
 
           {/* Cursor → LAML (left side to left side, separated) */}
           <path
@@ -792,7 +824,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
           >
             <div className="node-icon">🐳</div>
             <div className="node-label">{dbMcpLabel}</div>
-            <div className="node-action">Direct DB Queries</div>
+            <div className="node-action">{dbMcpAction}</div>
             <div className="node-url">{dbMcpUrl}</div>
           </div>
 
@@ -861,6 +893,11 @@ function DataFlowDiagram({ config, delay = 0 }) {
             <div className="node-label">{vectorBackendLabel} {vectorLocation}</div>
             <div className="node-action">Vector Search</div>
             <div className="node-url">{vectorUrl}</div>
+            {showVectorDashboardLink && (
+              <div className="node-url">
+                <a href={TURBOPUFFER_DASHBOARD_URL} target="_blank" rel="noreferrer">Turbopuffer UI</a>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -887,6 +924,7 @@ function DataFlowDiagram({ config, delay = 0 }) {
 function ServicePanel({ name, data, config, delay = 0 }) {
   const info = SERVICE_INFO[name] || { title: name, description: '', icon: '📦' }
   const statusColor = (data.errors_in_window || 0) > 0 ? COLORS.yellow : COLORS.green
+  const isTurbopuffer = config?.vector_backend === 'turbopuffer'
 
   // Determine if service is local or cloud
   let location = 'local'
@@ -894,10 +932,15 @@ function ServicePanel({ name, data, config, delay = 0 }) {
   if (name === 'ollama' || name === 'embedding') {
     locationUrl = config?.ollama?.host || 'localhost:11434'
   } else if (name === 'firebolt') {
-    location = config?.firebolt?.use_core ? 'local' : 'cloud'
-    locationUrl = config?.firebolt?.use_core
-      ? config?.firebolt?.core_url
-      : config?.firebolt?.account_name
+    if (isTurbopuffer) {
+      location = 'cloud'
+      locationUrl = 'turbopuffer.com/dashboard'
+    } else {
+      location = config?.firebolt?.use_core ? 'local' : 'cloud'
+      locationUrl = config?.firebolt?.use_core
+        ? config?.firebolt?.core_url
+        : config?.firebolt?.account_name
+    }
   }
 
   const operationData = data.by_operation
@@ -927,6 +970,16 @@ function ServicePanel({ name, data, config, delay = 0 }) {
         </span>
         <span className="location-url">{locationUrl}</span>
       </div>
+
+      {isTurbopuffer && name === 'firebolt' && (
+        <div className="services-hint">
+          Cloud vector backend details are available in{' '}
+          <a href={TURBOPUFFER_DASHBOARD_URL} target="_blank" rel="noreferrer">
+            Turbopuffer UI
+          </a>
+          .
+        </div>
+      )}
 
       <div className="service-metrics">
         <div className="metric">
@@ -1294,6 +1347,7 @@ const fetchStats = useCallback(async () => {
                   <option value="firebolt">Firebolt</option>
                   <option value="elastic">Elasticsearch</option>
                   <option value="clickhouse">ClickHouse</option>
+                  <option value="turbopuffer">Turbopuffer</option>
                 </select>
               </label>
             </div>
@@ -1332,7 +1386,7 @@ const fetchStats = useCallback(async () => {
           <span className="memory-error-icon">⚠️</span>
           <span>Could not load memory stats: {safeStats.memory.error}</span>
           <span className="memory-error-hint">
-            Check that the configured vector backend (Firebolt / Elasticsearch / ClickHouse) is reachable
+            Check that the configured vector backend (Firebolt / Elasticsearch / ClickHouse / Turbopuffer) is reachable
             and that the LAML HTTP API can connect to it.
           </span>
         </div>
@@ -1373,13 +1427,15 @@ const fetchStats = useCallback(async () => {
             title="Memory Data Size"
             value={
               safeStats.memory?.storage?.total_uncompressed_formatted ||
-              (brainConfig?.vector_backend && brainConfig.vector_backend !== 'firebolt'
+              (brainConfig?.vector_backend && !['firebolt', 'elastic', 'turbopuffer'].includes(brainConfig.vector_backend)
                 ? `N/A (${brainConfig.vector_backend})`
                 : '0 B')
             }
             subtitle={
-              brainConfig?.vector_backend && brainConfig.vector_backend !== 'firebolt'
-                ? `Storage sizing is currently only implemented for Firebolt. Active backend: ${brainConfig.vector_backend}.`
+              brainConfig?.vector_backend === 'turbopuffer'
+                ? <>Cloud storage/index details are in <a href={TURBOPUFFER_DASHBOARD_URL} target="_blank" rel="noreferrer">Turbopuffer UI</a>; local cards show only lightweight LAML-derived stats.</>
+                : brainConfig?.vector_backend && !['firebolt', 'elastic', 'turbopuffer'].includes(brainConfig.vector_backend)
+                ? `Storage sizing is currently implemented for Firebolt, Elasticsearch, and Turbopuffer. Active backend: ${brainConfig.vector_backend}.`
                 : `Raw data size before compression · ${
                     safeStats.memory?.storage?.total_compressed_formatted || '0 B'
                   } actual disk usage`

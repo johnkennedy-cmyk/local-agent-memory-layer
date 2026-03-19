@@ -232,4 +232,3 @@ class FireboltWorkingMemoryStore(WorkingMemoryStore):
       "DELETE FROM working_memory_items WHERE item_id = ?",
       (item_id,),
     )
-

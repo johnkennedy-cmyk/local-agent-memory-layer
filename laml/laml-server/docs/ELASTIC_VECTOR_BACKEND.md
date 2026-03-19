@@ -88,35 +88,7 @@ The MCP server in the compose file is intended for HTTP mode; for Cursor stdio u
 - When `LAML_VECTOR_BACKEND=elastic`, the dashboard **memory count**, **sessions**, and **working memory** stats all come from Elasticsearch. **Category breakdown**, **top accessed**, and **storage (SHOW TABLES)** are only available when using the Firebolt backend.
 - Quality and maintenance tools that run SQL over `long_term_memories` are written for Firebolt; they are not used when the Elastic backend is selected.
 
-### Migrating sessions and working memory from Firebolt to Elasticsearch
+### Migration notes
 
-In addition to long-term memories, you can migrate sessions and working memory:
-
-1. Ensure Firebolt has your `session_contexts` and `working_memory_items` data.
-2. Create the Elasticsearch indices (sessions and working memory are created by `init_elastic_index.py` when the backend is elastic).
-3. Run:
-   ```bash
-   python scripts/migrate_sessions_wm_firebolt_to_elastic.py
-   ```
-
-### Migrating existing long-term memories from Firebolt to Elasticsearch
-
-If you have an existing deployment that used Firebolt as the vector backend and you want to switch to Elasticsearch, you can perform a one-time migration of the `long_term_memories` table:
-
-1. Ensure Firebolt Core is running and contains your `long_term_memories` data.
-2. Configure `.env` with:
-   - `LAML_VECTOR_BACKEND=elastic`
-   - `ELASTICSEARCH_URL` / `ELASTICSEARCH_INDEX` / auth variables as described above.
-3. Create the Elasticsearch index and mapping:
-   ```bash
-   cd laml/laml-server
-   python scripts/init_elastic_index.py
-   ```
-4. Run the migration script:
-   ```bash
-   python scripts/migrate_firebolt_to_elastic.py
-   ```
-   This script reads all rows from Firebolt’s `long_term_memories` and bulk-indexes them into the configured Elasticsearch index with compatible field names and `dense_vector` embeddings.
-5. Restart the LAML server (`python -m src.server`) so `LAML_VECTOR_BACKEND=elastic` takes effect for all long-term memory tools.
-
-If any legacy rows have malformed embeddings or timestamps that do not match the current mapping, those specific rows may be skipped or rejected by Elasticsearch; this does not affect new memories stored after the switch to the Elastic backend.
+For new users, the recommended path is to start clean on the selected backend.
+If you need one-time legacy data migration from Firebolt, keep migration helpers in your local-only workspace and do not include them in upstream commits.

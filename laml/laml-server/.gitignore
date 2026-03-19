@@ -52,3 +52,7 @@ logs/
 # Local development
 *.db
 *.sqlite
+
+# Local-only workspace for internal scripts/notes (never pushed)
+local-only/*
+!local-only/README.md

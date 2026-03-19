@@ -1,6 +1,7 @@
 """Firebolt database client - supports both Cloud and Core (local)."""
 
 import json
+import logging
 import requests
 import threading
 from contextlib import contextmanager
@@ -10,6 +11,8 @@ from firebolt.client.auth import ClientCredentials
 
 from src.config import config
 from src.metrics import timed_call
+
+logger = logging.getLogger(__name__)
 
 
 class FireboltClient:
@@ -33,10 +36,10 @@ class FireboltClient:
         self.core_url = config.firebolt.core_url
 
         if self.use_core:
-            print(f"Using Firebolt Core at {self.core_url}")
+            logger.info("Using Firebolt Core at %s", self.core_url)
             self.database = config.firebolt.database
         else:
-            print(f"Using Firebolt Cloud: {config.firebolt.account_name}")
+            logger.info("Using Firebolt Cloud: %s", config.firebolt.account_name)
             self.auth = ClientCredentials(
                 client_id=config.firebolt.client_id,
                 client_secret=config.firebolt.client_secret,

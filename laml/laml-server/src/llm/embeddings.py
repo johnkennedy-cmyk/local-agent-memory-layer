@@ -1,11 +1,14 @@
 """Embedding service - supports both Ollama (local) and OpenAI."""
 
+import logging
 from typing import List
 import ollama
 import tiktoken
 
 from src.config import config
 from src.metrics import timed_call
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -36,12 +39,12 @@ class EmbeddingService:
                 self.openai_model = config.openai.embedding_model
                 self.use_ollama = False
                 self.dimensions = config.openai.embedding_dimensions
-                print(f"Using OpenAI for embeddings: {self.openai_model}")
+                logger.info("Using OpenAI for embeddings: %s", self.openai_model)
             except Exception:
                 pass
 
         if self.use_ollama:
-            print(f"Using Ollama for embeddings: {self.ollama_model}")
+            logger.info("Using Ollama for embeddings: %s", self.ollama_model)
 
         # Token counting (works for both)
         self.encoder = tiktoken.get_encoding("cl100k_base")

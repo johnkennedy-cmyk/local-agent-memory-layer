@@ -1,4 +1,4 @@
-"""Pluggable vector and long-term memory backend (Firebolt, Elastic, or ClickHouse)."""
+"""Pluggable vector and long-term memory backend with optional dual-write."""
 
 from __future__ import annotations
 
@@ -242,24 +242,149 @@ class FireboltMemoryRepository:
         return result
 
 
-def get_vector_store() -> VectorStore:
-    """Return the configured vector store (Firebolt, Elastic, or ClickHouse)."""
-    if config.vector_backend == "elastic":
+class DualWriteVectorStore(VectorStore):
+    """Write-through wrapper: read from primary, mirror writes/deletes to secondary."""
+
+    def __init__(self, primary: VectorStore, secondary: VectorStore):
+        self._primary = primary
+        self._secondary = secondary
+
+    def upsert_embeddings(
+        self,
+        items: List[tuple[str, list[float], dict[str, Any]]],
+    ) -> None:
+        self._primary.upsert_embeddings(items)
+        self._secondary.upsert_embeddings(items)
+
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        filters: Optional[Dict[str, Any]] = None,
+    ):
+        return self._primary.search(query_embedding=query_embedding, top_k=top_k, filters=filters)
+
+    def delete(self, ids: list[str]) -> None:
+        self._primary.delete(ids)
+        self._secondary.delete(ids)
+
+
+class DualWriteMemoryRepository:
+    """Write-through wrapper: read from primary, mirror writes/deletes to secondary."""
+
+    def __init__(self, primary: MemoryRepository, secondary: MemoryRepository):
+        self._primary = primary
+        self._secondary = secondary
+
+    def insert(self, doc: Dict[str, Any]) -> None:
+        self._primary.insert(doc)
+        self._secondary.insert(doc)
+
+    def update(self, memory_id: str, user_id: str, fields: Dict[str, Any]) -> None:
+        self._primary.update(memory_id, user_id, fields)
+        self._secondary.update(memory_id, user_id, fields)
+
+    def get_by_id(
+        self,
+        memory_id: str,
+        user_id: Optional[str] = None,
+        include_deleted: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        return self._primary.get_by_id(memory_id, user_id=user_id, include_deleted=include_deleted)
+
+    def get_many_by_ids(
+        self, ids: List[str], user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        return self._primary.get_many_by_ids(ids, user_id=user_id)
+
+    def count_for_user(self, user_id: str, include_deleted: bool = False) -> int:
+        return self._primary.count_for_user(user_id, include_deleted=include_deleted)
+
+    def soft_delete(self, memory_id: str, user_id: str) -> None:
+        self._primary.soft_delete(memory_id, user_id)
+        self._secondary.soft_delete(memory_id, user_id)
+
+    def hard_delete(self, memory_id: str, user_id: str) -> None:
+        self._primary.hard_delete(memory_id, user_id)
+        self._secondary.hard_delete(memory_id, user_id)
+
+    def delete_all_for_user(self, user_id: str) -> None:
+        self._primary.delete_all_for_user(user_id)
+        self._secondary.delete_all_for_user(user_id)
+
+    def increment_access_count(self, memory_id: str) -> None:
+        self._primary.increment_access_count(memory_id)
+        self._secondary.increment_access_count(memory_id)
+
+    def count_total(self, include_deleted: bool = False) -> int:
+        return self._primary.count_total(include_deleted=include_deleted)
+
+    def get_category_counts(self) -> Dict[str, int]:
+        getter = getattr(self._primary, "get_category_counts", None)
+        if getter is None:
+            return {}
+        return getter()
+
+    def get_top_accessed(self, limit: int = 5) -> List[Dict[str, Any]]:
+        getter = getattr(self._primary, "get_top_accessed", None)
+        if getter is None:
+            return []
+        return getter(limit=limit)
+
+    def get_storage_bytes(self) -> int:
+        getter = getattr(self._primary, "get_storage_bytes", None)
+        if getter is None:
+            return 0
+        return int(getter())
+
+
+def _vector_store_for_backend(backend: str) -> VectorStore:
+    if backend == "elastic":
         from src.memory.elastic_vector_store import ElasticVectorStore
+
         return ElasticVectorStore()
-    if config.vector_backend == "clickhouse":
+    if backend == "clickhouse":
         from src.memory.clickhouse_vector_store import ClickHouseVectorStore
+
         return ClickHouseVectorStore()
+    if backend == "turbopuffer":
+        from src.memory.turbopuffer_vector_store import TurbopufferVectorStore
+
+        return TurbopufferVectorStore()
     from src.memory.firebolt_vector_store import FireboltVectorStore
+
     return FireboltVectorStore()
 
 
-def get_memory_repository() -> MemoryRepository:
-    """Return the configured long-term memory repository (Firebolt, Elastic, or ClickHouse)."""
-    if config.vector_backend == "elastic":
+def _memory_repo_for_backend(backend: str) -> MemoryRepository:
+    if backend == "elastic":
         from src.memory.elastic_memory_repo import ElasticMemoryRepository
+
         return ElasticMemoryRepository()
-    if config.vector_backend == "clickhouse":
+    if backend == "clickhouse":
         from src.memory.clickhouse_memory_repo import ClickHouseMemoryRepository
+
         return ClickHouseMemoryRepository()
+    if backend == "turbopuffer":
+        from src.memory.turbopuffer_memory_repo import TurbopufferMemoryRepository
+
+        return TurbopufferMemoryRepository()
     return FireboltMemoryRepository()
+
+
+def get_vector_store() -> VectorStore:
+    """Return configured vector store; optionally mirror writes to a secondary backend."""
+    primary = _vector_store_for_backend(config.vector_backend)
+    if config.dual_write_backend:
+        secondary = _vector_store_for_backend(config.dual_write_backend)
+        return DualWriteVectorStore(primary=primary, secondary=secondary)
+    return primary
+
+
+def get_memory_repository() -> MemoryRepository:
+    """Return configured memory repository; optionally mirror writes to secondary backend."""
+    primary = _memory_repo_for_backend(config.vector_backend)
+    if config.dual_write_backend:
+        secondary = _memory_repo_for_backend(config.dual_write_backend)
+        return DualWriteMemoryRepository(primary=primary, secondary=secondary)
+    return primary

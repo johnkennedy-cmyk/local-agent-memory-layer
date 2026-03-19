@@ -395,7 +395,7 @@ All MCP clients should support:
 **Solutions:**
 1. Check server logs for registration errors
 2. Verify all dependencies are installed
-3. Test tools directly: `python scripts/test_tools.py`
+3. Test tools directly via MCP client calls (for example `init_session`, `recall_memories`)
 4. Check MCP client supports the tool schema version
 
 ### Issue: Authentication Errors

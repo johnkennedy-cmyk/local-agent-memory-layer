@@ -1,6 +1,32 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications. It uses a **single configurable backend** for all data: **Firebolt** (default), **Elasticsearch**, or **ClickHouse**. When you choose Elasticsearch or ClickHouse, sessions, working memory, and long-term memory all use that backend; **Firebolt is not required** in that case.
+An MCP server that provides intelligent memory management for LLM applications. It uses a **single configurable backend** for all data: **Firebolt** (default local option), **Turbopuffer** (primary cloud option), **Elasticsearch**, or **ClickHouse**. When you choose a non-Firebolt backend, sessions, working memory, and long-term memory all use that backend.
+
+## Turbopuffer Cloud Option (Primary)
+
+LAML supports **Turbopuffer** as a first-class backend for **all memory data paths**:
+- long-term memory + vector search
+- sessions
+- working memory
+
+Quick switch in `.env`:
+
+```bash
+LAML_VECTOR_BACKEND=turbopuffer
+TURBOPUFFER_API_KEY=...
+TURBOPUFFER_REGION=gcp-us-central1
+TURBOPUFFER_BASE_URL=https://gcp-us-central1.turbopuffer.com
+TURBOPUFFER_LONG_TERM_NAMESPACE=laml_long_term_memories
+TURBOPUFFER_SESSIONS_NAMESPACE=laml_sessions
+TURBOPUFFER_WORKING_MEMORY_NAMESPACE=laml_working_memory
+```
+
+For a safe rollout from an existing Firebolt deployment, keep reads on Firebolt and mirror writes:
+
+```bash
+LAML_VECTOR_BACKEND=firebolt
+LAML_DUAL_WRITE_BACKEND=turbopuffer
+```
 
 ## Features
 
@@ -19,9 +45,11 @@ An MCP server that provides intelligent memory management for LLM applications. 
 
 - Python 3.10+
 - A single backend for all LAML data (sessions, working memory, long-term memory):
-  - **Firebolt Core / Firebolt Cloud** (default) – requires Firebolt
+  - **Firebolt Core** (default local option)
+  - **Turbopuffer** (primary cloud option, recommended cloud backend)
   - **Elasticsearch** (see [Elastic backend](docs/ELASTIC_VECTOR_BACKEND.md)) – Firebolt not required
   - **ClickHouse** (see [ClickHouse backend](docs/CLICKHOUSE_VECTOR_BACKEND.md)) – Firebolt not required
+  - **Firebolt Cloud** (alternative cloud backend)
 - OpenAI API key (for embeddings), or a compatible local embedding model
 - Ollama installed locally (for classification and/or embeddings)
 
@@ -100,7 +128,8 @@ Environment variables (in `.env`):
 
 | Variable | Description |
 |----------|-------------|
-| `LAML_VECTOR_BACKEND` | `firebolt` (default), `elastic`, or `clickhouse` |
+| `LAML_VECTOR_BACKEND` | `firebolt` (default), `elastic`, `clickhouse`, or `turbopuffer` |
+| `LAML_DUAL_WRITE_BACKEND` | Optional secondary write backend during migrations (`firebolt`, `elastic`, `clickhouse`, `turbopuffer`) |
 | `OPENAI_API_KEY` | OpenAI API key for embeddings (if using OpenAI) |
 | `FIREBOLT_ACCOUNT_NAME` | Firebolt account name (for Firebolt backend) |
 | `FIREBOLT_CLIENT_ID` | Firebolt client ID (for Firebolt backend) |
@@ -119,9 +148,33 @@ Environment variables (in `.env`):
 | `OLLAMA_HOST` | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_MODEL` | Ollama model to use (default: mistral:7b) |
 
+## Local-Only Workspace (Not Pushed)
+
+Use `local-only/` for internal scripts, migration scratch work, and local state notes you do not want in GitHub.
+
+- `local-only/` is git-ignored by default.
+- `local-only/README.md` is tracked to document the convention.
+
 ### Choose your vector backend
 
 After completing the base setup above, pick one of these quick paths:
+
+- **Turbopuffer (primary cloud option)**
+  - Set in `.env`:
+    ```bash
+    LAML_VECTOR_BACKEND=turbopuffer
+    TURBOPUFFER_API_KEY=...
+    TURBOPUFFER_REGION=gcp-us-central1
+    TURBOPUFFER_BASE_URL=https://gcp-us-central1.turbopuffer.com
+    TURBOPUFFER_LONG_TERM_NAMESPACE=laml_long_term_memories
+    TURBOPUFFER_SESSIONS_NAMESPACE=laml_sessions
+    TURBOPUFFER_WORKING_MEMORY_NAMESPACE=laml_working_memory
+    ```
+  - Start the server:
+    ```bash
+    python -m src.server
+    ```
+  - For rollout from existing Firebolt data, see **[Turbopuffer backend](docs/TURBOPUFFER_VECTOR_BACKEND.md)**.
 
 - **Firebolt (default, simplest)**
   - Ensure Firebolt Core (or Firebolt Cloud) is running **before starting any MCP clients**:

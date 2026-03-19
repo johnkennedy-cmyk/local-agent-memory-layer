@@ -69,6 +69,18 @@ class ClickHouseConfig:
 
 
 @dataclass
+class TurbopufferConfig:
+    """Turbopuffer configuration (for vector backend=turbopuffer)."""
+    api_key: str
+    region: str
+    base_url: str
+    long_term_namespace: str
+    sessions_namespace: str
+    working_memory_namespace: str
+    embedding_dimensions: int = 768
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     firebolt: FireboltConfig
@@ -76,9 +88,13 @@ class Config:
     ollama: OllamaConfig
     elastic: ElasticConfig
     clickhouse: ClickHouseConfig
+    turbopuffer: TurbopufferConfig
 
-    # Vector backend: "firebolt", "elastic", or "clickhouse"
+    # Vector backend: "firebolt", "elastic", "clickhouse", or "turbopuffer"
     vector_backend: str = "firebolt"
+    # Optional write mirroring backend, used during migration/cutover.
+    # Reads continue to use vector_backend.
+    dual_write_backend: str = ""
 
     # Memory defaults
     default_max_tokens: int = 8000
@@ -111,8 +127,13 @@ def load_config() -> Config:
     )
 
     vector_backend = (os.getenv("LAML_VECTOR_BACKEND", "firebolt") or "firebolt").strip().lower()
-    if vector_backend not in ("firebolt", "elastic", "clickhouse"):
+    if vector_backend not in ("firebolt", "elastic", "clickhouse", "turbopuffer"):
         vector_backend = "firebolt"
+    dual_write_backend = (os.getenv("LAML_DUAL_WRITE_BACKEND", "") or "").strip().lower()
+    if dual_write_backend not in ("", "firebolt", "elastic", "clickhouse", "turbopuffer"):
+        dual_write_backend = ""
+    if dual_write_backend == vector_backend:
+        dual_write_backend = ""
 
     elastic = ElasticConfig(
         url=os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"),
@@ -143,6 +164,19 @@ def load_config() -> Config:
             or os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")
         ),
     )
+    tpuf_region = os.getenv("TURBOPUFFER_REGION", "gcp-us-central1")
+    turbopuffer = TurbopufferConfig(
+        api_key=os.getenv("TURBOPUFFER_API_KEY", ""),
+        region=tpuf_region,
+        base_url=os.getenv("TURBOPUFFER_BASE_URL", f"https://{tpuf_region}.turbopuffer.com"),
+        long_term_namespace=os.getenv("TURBOPUFFER_LONG_TERM_NAMESPACE", "laml_long_term_memories"),
+        sessions_namespace=os.getenv("TURBOPUFFER_SESSIONS_NAMESPACE", "laml_sessions"),
+        working_memory_namespace=os.getenv("TURBOPUFFER_WORKING_MEMORY_NAMESPACE", "laml_working_memory"),
+        embedding_dimensions=int(
+            os.getenv("TURBOPUFFER_EMBEDDING_DIMENSIONS")
+            or os.getenv("OLLAMA_EMBEDDING_DIMENSIONS", "768")
+        ),
+    )
 
     return Config(
         firebolt=firebolt,
@@ -150,7 +184,9 @@ def load_config() -> Config:
         ollama=ollama,
         elastic=elastic,
         clickhouse=clickhouse,
+        turbopuffer=turbopuffer,
         vector_backend=vector_backend,
+        dual_write_backend=dual_write_backend,
     )
 
 
