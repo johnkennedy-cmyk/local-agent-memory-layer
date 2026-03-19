@@ -63,10 +63,12 @@ LAML_DUAL_WRITE_BACKEND=turbopuffer
    pip install -e ".[dev]"
    ```
 
-2. **Configure environment:**
+2. **Configure environment (local or cloud vector backend):**
    ```bash
    cp .env.example .env
-   # Edit .env with your credentials
+   # Edit .env with your credentials and choose your backend:
+   # - Local default: LAML_VECTOR_BACKEND=firebolt
+   # - Cloud recommended: LAML_VECTOR_BACKEND=turbopuffer
    ```
 
 3. **Install and start Ollama:**
