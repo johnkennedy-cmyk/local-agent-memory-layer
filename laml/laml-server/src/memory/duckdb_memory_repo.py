@@ -263,4 +263,3 @@ class DuckDBMemoryRepository:
             return os.path.getsize(self._path)
         except OSError:
             return 0
-

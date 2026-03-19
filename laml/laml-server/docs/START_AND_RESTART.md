@@ -50,11 +50,11 @@ cp config/env.example .env  # or create .env from README
 From **`laml/laml-server/`**:
 
 - **Firebolt Core** (if you run it via Docker): start that stack first so `localhost:3473` is up.
-- **Elasticsearch**:  
-  `docker compose -f docker-compose.elastic.yml up -d`  
+- **Elasticsearch**:
+  `docker compose -f docker-compose.elastic.yml up -d`
   Then when healthy: `python scripts/init_elastic_index.py`
-- **ClickHouse**:  
-  `docker compose -f docker-compose.clickhouse.yml up -d`  
+- **ClickHouse**:
+  `docker compose -f docker-compose.clickhouse.yml up -d`
   Then when healthy: `python scripts/init_clickhouse.py`
 
 ---
@@ -127,8 +127,8 @@ pkill -f "python -m src.server"
 
 ## 7. Start HTTP API and dashboard (optional)
 
-- **With Docker** (from `laml/laml-server/`):  
-  `docker compose up -d`  
+- **With Docker** (from `laml/laml-server/`):
+  `docker compose up -d`
   → API: http://localhost:8082, Dashboard: http://localhost:5174
 
 - **Without Docker**: When you use a LAML tool in Cursor, `src/server.py` can auto-start the HTTP API (port **8082**) and the dashboard (port **5174**) unless you set `LAML_AUTOSTART_DASHBOARD=false`. Or run manually:

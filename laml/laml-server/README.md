@@ -1,10 +1,10 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications. It uses a **single configurable backend** for all data: **Firebolt** (default local option), **Turbopuffer** (primary cloud option), **Elasticsearch**, or **ClickHouse**. When you choose a non-Firebolt backend, sessions, working memory, and long-term memory all use that backend.
+An MCP server that provides intelligent memory management for LLM applications. LAML is optimized for a **local-first setup** (Firebolt Core + Ollama), while fully supporting cloud vector backends. It uses a **single configurable backend** for all data: **Firebolt** (default local option), **Turbopuffer** (recommended cloud option), **Elasticsearch**, or **ClickHouse**. When you choose a non-Firebolt backend, sessions, working memory, and long-term memory all use that backend.
 
 ## Turbopuffer Cloud Option (Primary)
 
-LAML supports **Turbopuffer** as a first-class backend for **all memory data paths**:
+LAML supports **Turbopuffer** as a first-class backend for **all memory data paths**, and it is configured, tested, and known to work in this project:
 - long-term memory + vector search
 - sessions
 - working memory
