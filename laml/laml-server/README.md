@@ -1,6 +1,15 @@
 # Local Agent Memory Layer (LAML) Server
 
-An MCP server that provides intelligent memory management for LLM applications. LAML is optimized for a **local-first setup** (Firebolt Core + Ollama), while fully supporting cloud vector backends. It uses a **single configurable backend** for all data: **Firebolt** (default local option), **Turbopuffer** (recommended cloud option), **Elasticsearch**, or **ClickHouse**. When you choose a non-Firebolt backend, sessions, working memory, and long-term memory all use that backend.
+An MCP server for **intelligent memory** and **native token efficiency** in LLM agents.
+
+LAML gives you persistent working + long-term memory with semantic search, and **embeds [Headroom](https://github.com/chopratejas/headroom) + [RTK](https://github.com/rtk-ai/rtk)** so you do not need separate token-optimization tooling:
+
+- Every LAML tool response is **compressed before it reaches the agent** (Headroom, on by default).
+- Shell commands in Cursor/Claude are **rewritten to RTK** for 60–90% smaller output (hooks).
+- A **Headroom MCP server** entry compresses other MCP tool results (Firebolt, Cloudflare, etc.).
+- **`laml token-tools`** CLI installs, configures, and weekly-updates both stacks.
+
+Backends: **Firebolt** (default local), **Turbopuffer** (recommended cloud), **Elasticsearch**, or **ClickHouse** — one backend for sessions, working memory, and long-term vectors.
 
 ## Turbopuffer Cloud Option (Primary)
 
@@ -30,14 +39,24 @@ LAML_DUAL_WRITE_BACKEND=turbopuffer
 
 ## Features
 
+### Memory
+
 - **Working Memory**: Fast, session-scoped storage for active context
 - **Long-Term Memory**: Persistent vector-enabled storage with semantic search
-- **Human-Aligned Taxonomy**: Memory types modeled after human cognition
-  - Episodic (events, decisions, outcomes)
-  - Semantic (facts, knowledge, entities)
-  - Procedural (workflows, patterns)
-  - Preference (communication style, tool preferences)
-- **Smart Retrieval**: Query-intent-aware context assembly
+- **Human-Aligned Taxonomy**: Episodic, semantic, procedural, preference
+- **Smart Retrieval**: Query-intent-aware context assembly (`get_relevant_context`)
+- **Quality tools**: Contradiction detection, decay, maintenance, analytics
+
+### Token efficiency (embedded)
+
+| Component | Package | Role |
+|-----------|---------|------|
+| In-server compression | `src/token_efficiency/` | Wraps every `@mcp.tool` output via Headroom |
+| Agent setup | `laml token-tools setup` | RTK install, Cursor `mcp.json` + `hooks.json`, weekly launchd |
+| Headroom MCP | `src.token_efficiency.headroom_mcp_entry` | `headroom_compress` / `headroom_retrieve` / `headroom_stats` |
+| Metrics | `get_token_optimization_status`, `get_fml_stats` | Live compression savings per tool |
+
+**Typical savings:** 40–60% on large `recall_memories` payloads; 60–90% on shell via RTK. Full docs: **[docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md)**.
 
 ## Quick Start
 
@@ -53,14 +72,29 @@ LAML_DUAL_WRITE_BACKEND=turbopuffer
 - OpenAI API key (for embeddings), or a compatible local embedding model
 - Ollama installed locally (for classification and/or embeddings)
 
-### Setup
+### Setup (recommended: bootstrap)
+
+```bash
+cd laml-server
+./scripts/bootstrap.sh   # venv, DB, Cursor MCP, RTK + Headroom, weekly updates
+```
+
+Restart Cursor, enable **laml** and **headroom** MCP servers, then:
+
+```bash
+source .venv/bin/activate
+laml token-tools status
+```
+
+### Manual setup
 
 1. **Clone and install dependencies:**
    ```bash
    cd laml-server
-   python -m venv .venv
+   python3 -m venv .venv
    source .venv/bin/activate
-   pip install -e ".[dev]"
+   pip install -e ".[dev]"    # includes headroom-ai[mcp]
+   laml token-tools setup     # RTK + Cursor hooks + Headroom MCP
    ```
 
 2. **Configure environment (local or cloud vector backend):**
@@ -104,16 +138,25 @@ LAML works with any MCP-compatible client. See **[Platform Setup Guide](docs/MCP
 
 Add to your Cursor settings (`.cursor/mcp.json`):
 
+Use `config/cursor-mcp.json.template` (includes **laml** + **headroom**). Minimal example:
+
 ```json
 {
   "mcpServers": {
     "laml": {
-      "command": "/path/to/laml-server/.venv/bin/python",
+      "command": "/path/to/laml-server/.venv/bin/python3.11",
       "args": ["-m", "src.server"],
       "cwd": "/path/to/laml-server",
       "env": {
-        "PYTHONPATH": "/path/to/laml-server"
+        "PYTHONPATH": "/path/to/laml-server",
+        "LAML_HEADROOM_COMPRESS": "true"
       }
+    },
+    "headroom": {
+      "command": "/path/to/laml-server/.venv/bin/python3.11",
+      "args": ["-m", "src.token_efficiency.headroom_mcp_entry"],
+      "cwd": "/path/to/laml-server",
+      "env": { "PYTHONPATH": "/path/to/laml-server" }
     }
   }
 }
@@ -132,6 +175,7 @@ Environment variables (in `.env`):
 |----------|-------------|
 | `LAML_VECTOR_BACKEND` | `firebolt` (default), `elastic`, `clickhouse`, or `turbopuffer` |
 | `LAML_DUAL_WRITE_BACKEND` | Optional secondary write backend during migrations (`firebolt`, `elastic`, `clickhouse`, `turbopuffer`) |
+| `LAML_HEADROOM_COMPRESS` | `true` (default): compress MCP tool JSON via [Headroom](https://github.com/chopratejas/headroom) before responses reach the agent |
 | `OPENAI_API_KEY` | OpenAI API key for embeddings (if using OpenAI) |
 | `FIREBOLT_ACCOUNT_NAME` | Firebolt account name (for Firebolt backend) |
 | `FIREBOLT_CLIENT_ID` | Firebolt client ID (for Firebolt backend) |
@@ -264,31 +308,45 @@ After completing the base setup above, pick one of these quick paths:
 - `get_relevant_context` - Assemble optimal context from all memory sources
 - `checkpoint_working_memory` - Promote working memory items to long-term storage
 
+### Token efficiency (3 tools)
+- `get_token_optimization_status` - RTK/Headroom versions, config, live compression metrics
+- `setup_token_optimization` - Install/configure token tools for Cursor and other agents
+- `update_token_optimization_tools` - Upgrade RTK (brew) and Headroom (pip)
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  MCP Client (Cursor, Claude Desktop, etc.)              │
-└─────────────────────┬───────────────────────────────────┘
-                      │ MCP Protocol
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│  LAML MCP Server                                        │
-│  ├── Working Memory Manager                             │
-│  ├── Long-Term Memory Manager                           │
-│  ├── Embedding Service (OpenAI)                         │
-│  └── Classification Service (Ollama)                    │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│  Firebolt                                               │
-│  ├── session_contexts (working memory)                  │
-│  ├── working_memory_items                               │
-│  ├── long_term_memories (with vector embeddings)        │
-│  └── memory_access_log                                  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Agent (Cursor, Claude Code, …)                              │
+├──────────────────────────────────────────────────────────────┤
+│  Shell ──► RTK hook (~/.cursor/hooks.json) ──► compact output  │
+│  LAML MCP ──► Headroom (in-server) ──► compact memory JSON   │
+│  Other MCP ──► Headroom MCP ──► compress / retrieve          │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│  LAML MCP Server (src/server.py)                             │
+│  ├── token_efficiency/  (compression, agent_setup, CLI)      │
+│  ├── Working + long-term memory tools                        │
+│  ├── Embeddings + Ollama classification                      │
+│  └── HTTP API + dashboard (optional)                         │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Vector backend (Firebolt / Turbopuffer / Elastic / CH)    │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+## CLI
+
+| Command | Description |
+|---------|-------------|
+| `laml setup` | Cursor MCP + token tools |
+| `laml token-tools setup` | Full RTK + Headroom install |
+| `laml token-tools status` | Versions and compression metrics |
+| `laml token-tools update` | Upgrade RTK and Headroom |
 
 ## License
 

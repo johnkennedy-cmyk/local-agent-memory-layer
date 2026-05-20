@@ -1,6 +1,8 @@
 # Local Agent Memory Layer (LAML)
 
-An intelligent, persistent memory system for LLM agents using a local vector database with HNSW (or equivalent) vector search. Designed to give Cursor (and other MCP-compatible tools) long-term memory that persists across sessions, while keeping the choice of local database and model flexible (Firebolt Core + Ollama by default in this fork).
+**Persistent memory for AI agents — plus built-in token efficiency for every interaction.**
+
+LAML gives Cursor, Claude Code, and other MCP clients long-term memory (working + semantic recall) backed by a pluggable vector store (Firebolt, Turbopuffer, Elasticsearch, or ClickHouse). Unlike memory-only tools, LAML **natively embeds [Headroom](https://github.com/chopratejas/headroom) and [RTK](https://github.com/rtk-ai/rtk)** so the same setup that remembers your context also **cuts token usage by 40–90%** on memory responses, shell commands, and other MCP tool output.
 
 ## Credits
 
@@ -10,11 +12,28 @@ An intelligent, persistent memory system for LLM agents using a local vector dat
 
 ## What This Does
 
+### Memory (core)
+
 - **Working Memory**: Session-scoped context that persists during a conversation
 - **Long-Term Memory**: Vector-indexed persistent storage with semantic search
 - **Auto-Classification**: Memories are automatically categorized (episodic, semantic, procedural, preference)
 - **Semantic Recall**: Find relevant memories based on meaning, not just keywords
-- **100% Local**: Runs entirely on your machine using Firebolt Core + Ollama (no cloud dependencies)
+- **Local-first**: Firebolt Core + Ollama by default; cloud vector backends supported
+
+### Token efficiency (embedded — new)
+
+LAML is a **memory layer and a token optimization layer** in one install:
+
+| Layer | Tool | What gets smaller |
+|-------|------|-------------------|
+| LAML MCP responses | **Headroom** (in-server) | `recall_memories`, `get_working_memory`, stats JSON — often **40–60%+** on large recalls |
+| Shell commands | **RTK** (Cursor/Claude hooks) | `git`, tests, lint, `docker`, `grep` — typically **60–90%** |
+| Other MCP tools | **Headroom MCP** | Tool results from Firebolt, Cloudflare, custom servers |
+| All agents | `laml token-tools setup` | One command wires Cursor + weekly updates |
+
+Validated example: `recall_memories` compressed **641 → 347 tokens** (~46% saved) while preserving retrievable content via Headroom CCR.
+
+→ Full guide: [laml/laml-server/docs/TOKEN_EFFICIENCY.md](laml/laml-server/docs/TOKEN_EFFICIENCY.md)
 
 ---
 
@@ -43,18 +62,24 @@ cd local-agent-memory-layer
 # Ensure Firebolt Core and Ollama are running first (see Prerequisites below)
 
 # Run the bootstrap script - does everything automatically
-cd fml/fml-server
+cd laml/laml-server
 ./scripts/bootstrap.sh
 ```
 
 The bootstrap script will:
-- Set up Python virtual environment and dependencies
+- Set up Python virtual environment and dependencies (**includes Headroom**)
 - Create database schema and tables
 - **Seed core memories** (security rules, workflows, troubleshooting guides)
-- Configure Cursor IDE with FML rules and MCP settings
+- Configure Cursor IDE with LAML rules, MCP settings, **RTK hooks, and Headroom**
+- Schedule **weekly RTK/Headroom updates** (macOS launchd)
 - Set up pre-commit security hooks
 
-After bootstrap completes, **restart Cursor** and start chatting!
+After bootstrap completes, **restart Cursor**, enable **laml** and **headroom** in Settings → Tools & MCP, then:
+
+```bash
+cd laml/laml-server && source .venv/bin/activate
+laml token-tools status   # confirm RTK + Headroom
+```
 
 ---
 
@@ -205,7 +230,7 @@ python scripts/test_security.py
 
 ### Step 8: Configure MCP Client to Use LAML
 
-LAML works with any MCP-compatible client. See **[Platform Setup Guide](fml/fml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
+LAML works with any MCP-compatible client. See **[Platform Setup Guide](laml/laml-server/docs/MCP_PLATFORM_SETUP.md)** for detailed instructions for:
 - **Claude Code** (Anthropic)
 - **Google Gemini** / Antigravity Codes
 - **Cursor IDE** (shown below)
@@ -367,7 +392,7 @@ curl http://localhost:8082/api/version
 
 # If "needs_restart": true, restart the server:
 pkill -f "python.*http_api"
-cd fml/fml-server
+cd laml/laml-server
 source .venv/bin/activate
 PYTHONPATH=. python -m src.http_api &
 ```
@@ -398,14 +423,14 @@ Firebolt Core only allows one write transaction at a time. The FML server uses a
 LAML includes a React dashboard for monitoring:
 
 ```bash
-cd fml/dashboard
+cd laml/dashboard
 npm install
 npm run dev
 ```
 
 Also start the HTTP API:
 ```bash
-cd fml/fml-server
+cd laml/laml-server
 source .venv/bin/activate
 python -m src.http_api
 ```
@@ -442,11 +467,11 @@ To run both servers, update your `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "laml": {
-      "command": "/path/to/local-agent-memory-layer/fml/fml-server/.venv/bin/python",
+      "command": "/path/to/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
       "args": ["-m", "src.server"],
-      "cwd": "/path/to/local-agent-memory-layer/fml/fml-server",
+      "cwd": "/path/to/local-agent-memory-layer/laml/laml-server",
       "env": {
-        "PYTHONPATH": "/path/to/local-agent-memory-layer/fml/fml-server"
+        "PYTHONPATH": "/path/to/local-agent-memory-layer/laml/laml-server"
       }
     },
     "firebolt": {
@@ -480,7 +505,7 @@ Both servers connect to the same Firebolt Core instance, so your memory data and
 
 ```
 local-agent-memory-layer/
-├── fml/
+├── laml/
 │   ├── fml-server/              # Core MCP server (Python)
 │   │   ├── src/
 │   │   │   ├── server.py        # MCP server entry point
@@ -553,7 +578,7 @@ The repository includes pre-commit hooks for additional security:
 
 ```bash
 # Install pre-commit hooks
-cd fml/fml-server
+cd laml/laml-server
 pip install pre-commit detect-secrets
 pre-commit install
 
@@ -574,7 +599,7 @@ detect-secrets scan .
 Verify the security validation is working:
 
 ```bash
-cd fml/fml-server
+cd laml/laml-server
 source .venv/bin/activate
 python scripts/test_security.py
 ```

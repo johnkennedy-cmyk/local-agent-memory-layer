@@ -35,3 +35,13 @@ At natural conversation boundaries or when the session is long, call **`checkpoi
 - Use **`get_relevant_context`** when you need combined working + long-term context for a complex query.
 
 LAML uses the `laml` MCP server and is database-agnostic (e.g. Firebolt Core or Elasticsearch).
+
+## Token efficiency (embedded — RTK + Headroom)
+
+LAML natively compresses its own MCP responses via **Headroom**. For all LLM work:
+
+1. At session start, optionally call **`get_token_optimization_status`** to confirm RTK/Headroom are active.
+2. Prefer **`rtk`-prefixed shell commands** when running git, tests, lint, docker (`rtk git status`, `rtk cargo test`) — Cursor hook rewrites Shell tools when RTK is installed.
+3. LAML memory JSON is already compressed; use **`headroom_retrieve`** (Headroom MCP) only if you need full uncompressed tool payloads.
+
+Setup from terminal: `laml token-tools setup` (or MCP: `setup_token_optimization`).

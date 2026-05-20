@@ -1,5 +1,16 @@
 # LAML Scripts
 
+## Token optimization (RTK + Headroom)
+
+One-shot setup after bootstrap (or anytime):
+
+```bash
+./laml/scripts/setup-token-optimization.sh
+# equivalent: cd laml/laml-server && laml token-tools setup
+```
+
+Weekly updates are scheduled by setup (`com.laml.token-tools-weekly` on macOS). Log: `~/Library/Logs/laml-token-tools-update.log`.
+
 ## Start dashboard and HTTP API at login (macOS)
 
 To have the **LAML Dashboard** and **LAML HTTP API** start automatically when you log in (so they are already running when you open Cursor):

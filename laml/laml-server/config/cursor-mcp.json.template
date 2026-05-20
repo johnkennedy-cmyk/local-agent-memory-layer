@@ -1,8 +1,17 @@
 {
   "mcpServers": {
     "laml": {
-      "command": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
+      "command": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server/.venv/bin/python3.11",
       "args": ["-m", "src.server"],
+      "cwd": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server",
+      "env": {
+        "PYTHONPATH": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server",
+        "LAML_HEADROOM_COMPRESS": "true"
+      }
+    },
+    "headroom": {
+      "command": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server/.venv/bin/python3.11",
+      "args": ["-m", "src.token_efficiency.headroom_mcp_entry"],
       "cwd": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server",
       "env": {
         "PYTHONPATH": "/FULL/PATH/TO/local-agent-memory-layer/laml/laml-server"

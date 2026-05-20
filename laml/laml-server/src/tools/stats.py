@@ -94,9 +94,12 @@ def register_stats_tools(mcp):
         except Exception as e:
             memory_stats = {"error": str(e)}
 
+        from src.token_efficiency.metrics import get_metrics as get_token_metrics
+
         return {
             **service_stats,
             "memory": memory_stats,
+            "token_efficiency": get_token_metrics(),
         }
 
     @mcp.tool()

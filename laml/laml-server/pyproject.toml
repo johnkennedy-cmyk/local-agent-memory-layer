@@ -1,13 +1,15 @@
 [project]
 name = "laml-server"
 version = "0.1.0"
-description = "Local Agent Memory Layer (LAML) - MCP server for LLM memory management with pluggable local vector backends"
+description = "Local Agent Memory Layer (LAML) - MCP server for LLM memory management with pluggable local vector backends and embedded token efficiency (RTK + Headroom)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "click>=8.0.0",
     "clickhouse-connect>=0.7.0",
     "elasticsearch>=8.0.0",
     "firebolt-sdk>=1.0.0",
+    "headroom-ai[mcp]>=0.22.0",
     "openai>=1.0.0",
     "ollama>=0.1.0",
     "mcp>=0.1.0",
@@ -15,6 +17,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "tiktoken>=0.5.0",
 ]
+
+[project.scripts]
+laml = "src.cli:main"
 
 [project.optional-dependencies]
 dev = [

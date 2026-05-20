@@ -9,10 +9,12 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from src.token_efficiency import install_tool_output_compression
 from src.tools.context import register_context_tools
 from src.tools.longterm_memory import register_longterm_memory_tools
 from src.tools.quality import register_quality_tools
 from src.tools.stats import register_stats_tools
+from src.tools.token_efficiency import register_token_efficiency_tools
 from src.tools.working_memory import register_working_memory_tools
 
 # Configure logging
@@ -92,8 +94,16 @@ Available tools:
 - supersede_memory: Mark old memory as replaced by newer one
 - apply_memory_decay: Reduce importance of unused memories
 - run_daily_maintenance: Run backup, decay, and quality checks
+
+Token efficiency (RTK + Headroom, embedded):
+- get_token_optimization_status: RTK/Headroom install state and compression metrics
+- setup_token_optimization: Install/configure token tools for Cursor and other agents
+- update_token_optimization_tools: Upgrade RTK and Headroom
 """,
 )
+
+# Compress all MCP tool JSON responses via Headroom before they reach Cursor.
+install_tool_output_compression(mcp)
 
 
 def setup_server():
@@ -114,6 +124,9 @@ def setup_server():
 
     register_quality_tools(mcp)
     logger.info("  ✓ Quality/maintenance tools registered")
+
+    register_token_efficiency_tools(mcp)
+    logger.info("  ✓ Token efficiency tools registered")
 
     logger.info("All tools registered successfully!")
 
