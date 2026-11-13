@@ -2,7 +2,9 @@
 
 **Persistent memory for AI agents — plus built-in token efficiency for every interaction.**
 
-LAML gives Cursor, Claude Code, and other MCP clients long-term memory (working + semantic recall) backed by a pluggable vector store (Firebolt, Turbopuffer, Elasticsearch, or ClickHouse). Unlike memory-only tools, LAML **natively embeds [Headroom](https://github.com/chopratejas/headroom) and [RTK](https://github.com/rtk-ai/rtk)** so the same setup that remembers your context also **cuts token usage by 40–90%** on memory responses, shell commands, and other MCP tool output.
+Local agent memory is [Relate](https://relatedb.ai): learned facts are a connected graph, queried with Cypher. Do not use a local Firebolt Core instance as the semantic layer. See [AGENTS.md](AGENTS.md).
+
+LAML, in `laml/`, is the token-efficiency layer (and an optional older vector memory server). It **natively embeds [Headroom](https://github.com/chopratejas/headroom) and [RTK](https://github.com/rtk-ai/rtk)** so memory responses, shell commands, and other MCP tool output can be **40–90%** smaller. Optional LAML vector backends are Turbopuffer, Elasticsearch, ClickHouse, or Firebolt cloud. Local Firebolt Core is not one of them.
 
 ## Credits
 
@@ -18,7 +20,7 @@ LAML gives Cursor, Claude Code, and other MCP clients long-term memory (working 
 - **Long-Term Memory**: Vector-indexed persistent storage with semantic search
 - **Auto-Classification**: Memories are automatically categorized (episodic, semantic, procedural, preference)
 - **Semantic Recall**: Find relevant memories based on meaning, not just keywords
-- **Local-first**: Firebolt Core + Ollama by default; cloud vector backends supported
+- **Local memory**: Relate on this Mac (`~/.relate/memory`), not Firebolt Core
 
 ### Token efficiency (embedded — new)
 
@@ -114,29 +116,20 @@ ollama pull llama3:8b        # For classification
 ollama pull nomic-embed-text  # For embeddings (768 dimensions)
 ```
 
-### Step 2: Choose your vector backend (local or cloud)
+### Step 2: Install Relate (local memory)
 
-LAML is optimized for a local-first setup, but cloud vector backends are fully supported.
-
-- **Local default:** Firebolt Core
-- **Cloud recommended:** Turbopuffer (configured, tested, and known to work in this repo)
-
-If you want to use the default local Firebolt Core backend today, follow these steps:
+Local memory is Relate. The official installer checks the release signature and SHA-256, then installs the `relate` binary to `~/.local/bin`:
 
 ```bash
-# Install Firebolt Core using the official installer
-bash <(curl -s https://get-core.firebolt.io/)
-
-# Or if you have the manage script:
-# cd firebolt-core-local && ./manage-firebolt.sh start
-
-# Verify it's running (should return a response)
-curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"
+curl -sSfL https://relatedb.ai/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+relate --version
+relate skill install
 ```
 
-Firebolt Core runs at `http://localhost:3473` by default.
+On this Mac the shared store is the directory `~/.relate/memory`, served on loopback by LaunchAgent `ai.relatedb.agent-memory` (MCP `http://127.0.0.1:8399/mcp`, Bolt `bolt://127.0.0.1:7687`, HTTP Query API port `7474`). Connection details and the graph model are in [AGENTS.md](AGENTS.md). Do not install or start Firebolt Core for memory.
 
-If you want cloud instead, skip Firebolt Core install and set `LAML_VECTOR_BACKEND=turbopuffer` in Step 4.
+The LAML server can still use a cloud vector backend. Turbopuffer is the one configured and tested in this repo. Set `LAML_VECTOR_BACKEND=turbopuffer` when you want that server. It is not a substitute for the Relate graph.
 
 ### Step 3: Clone and Set Up LAML
 
@@ -164,13 +157,12 @@ cp config/env.example .env
 nano .env
 ```
 
-**For local-only setup (Firebolt Core + Ollama), use:**
+**Local agent memory does not use this file.** Relate is configured in [AGENTS.md](AGENTS.md). If you still run the optional LAML vector server, point it at a cloud backend (`LAML_VECTOR_BACKEND=turbopuffer`), not at Firebolt Core:
 
 ```env
-# Firebolt Core (Local)
-FIREBOLT_USE_CORE=true
-FIREBOLT_CORE_URL=http://localhost:3473
-FIREBOLT_DATABASE=laml
+# Do not set FIREBOLT_USE_CORE=true. Local Firebolt Core is not the semantic layer.
+FIREBOLT_USE_CORE=false
+LAML_VECTOR_BACKEND=turbopuffer
 
 # Ollama (Local LLM - runs at localhost:11434)
 OLLAMA_HOST=http://localhost:11434
@@ -182,7 +174,9 @@ OLLAMA_EMBEDDING_DIMENSIONS=768
 # OPENAI_API_KEY=your-key-here
 ```
 
-### Step 5: Initialize Database Schema (Firebolt Core backend)
+### Step 5: Optional LAML vector schema
+
+Local memory is the Relate directory from Step 2 (`~/.relate/memory`). Skip this step for that store. The commands below initialize tables only when you run the optional LAML vector server.
 
 ```bash
 # Ensure virtual environment is active
@@ -276,7 +270,7 @@ Configuration templates are available in `laml/laml-server/config/` directory.
 
 ### Step 9: Add Global Cursor Rules
 
-Create `~/.cursor/rules/laml-memory.mdc` with the content from `cursor-rules/laml-memory.mdc` in this repo. This tells all Cursor agents to use LAML automatically.
+Copy `cursor-rules/laml-memory.mdc` to `~/.cursor/rules/laml-memory.mdc`. This tells Cursor agents on this Mac to use the Relate graph, not local Firebolt.
 
 ### Step 10: Restart Cursor
 
@@ -373,11 +367,11 @@ Memories are auto-classified into human-aligned categories:
 
 ## Troubleshooting
 
-### LAML not responding in Cursor
-1. Check Firebolt Core is running: `curl http://localhost:3473/?output_format=TabSeparated -d "SELECT 1"`
-2. Check Ollama is running: `curl http://localhost:11434/api/tags`
-3. Check MCP config path is correct in `~/.cursor/mcp.json`
-4. Restart Cursor completely (Cmd+Q)
+### Relate memory not responding
+1. Check the writer: `lsof -nP -iTCP:8399 -sTCP:LISTEN` (MCP), `7687` (Bolt), `7474` (HTTP Query API).
+2. LaunchAgent label: `ai.relatedb.agent-memory`. Logs: `~/.relate/serve.err` (mode 0600; it can contain the local auth token — do not paste it into chat).
+3. A second writable open of `~/.relate/memory` exits 5 while that server is running. Read with `--read-only=live`, or query through MCP.
+4. Restart Cursor completely (Cmd+Q) after changing `~/.cursor/mcp.json`.
 
 ### Dashboard showing incorrect/stale data
 The HTTP API server (used by the dashboard) doesn't auto-reload when code changes. If you see:
@@ -437,67 +431,36 @@ python -m src.http_api
 
 Dashboard runs at `http://localhost:5174`
 
-The dashboard visualizes both the FML memory flow and the optional Firebolt MCP query flow (see below).
+The dashboard is optional and is not the local memory store. Local memory is Relate (see below).
 
 ---
 
-## Running with Firebolt MCP (Optional)
+## Local memory (Relate)
 
-For full Firebolt capabilities alongside memory management, you can run both LAML and the official Firebolt MCP server in parallel. This gives your agent:
+Agents on this Mac share one Relate store, outside this checkout:
 
-- **LAML**: Persistent memory storage and semantic recall
-- **Firebolt MCP**: Direct SQL queries against Firebolt Core databases
-
-The dashboard UI shows both data flows side-by-side, demonstrating how they work together through Firebolt Core.
-
-### Installing Firebolt MCP
-
-The Firebolt MCP server is available via npm:
-
-```bash
-npm install -g @anthropic/firebolt-mcp
-# Or use npx directly in the config
-```
-
-### Combined MCP Configuration
-
-To run both servers, update your `~/.cursor/mcp.json`:
+| | |
+|--|--|
+| Store | `~/.relate/memory` (directory) |
+| MCP | `http://127.0.0.1:8399/mcp` |
+| Bolt | `bolt://127.0.0.1:7687` |
+| HTTP Query API | `POST http://127.0.0.1:7474/db/neo4j/query/v2` |
+| Tools | `get_schema`, `read_cypher`, `write_cypher` |
+| Auth | HTTP Basic user `relate`. Password file `~/.relate/memory.auth-token` (mode 0600). Put the header only in `~/.cursor/mcp.json`, never in git. |
 
 ```json
 {
   "mcpServers": {
-    "laml": {
-      "command": "/path/to/local-agent-memory-layer/laml/laml-server/.venv/bin/python",
-      "args": ["-m", "src.server"],
-      "cwd": "/path/to/local-agent-memory-layer/laml/laml-server",
-      "env": {
-        "PYTHONPATH": "/path/to/local-agent-memory-layer/laml/laml-server"
-      }
-    },
-    "firebolt": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/firebolt-mcp"],
-      "env": {
-        "FIREBOLT_CORE_URL": "http://localhost:3473"
-      }
+    "relate": {
+      "url": "http://127.0.0.1:8399/mcp"
     }
   }
 }
 ```
 
-### How They Work Together
+Add the Basic header locally. The `relate` skill (`relate skill install`) is installed for Cursor, Claude Code, Gemini CLI, and Antigravity on this Mac. Cursor rules: copy `cursor-rules/laml-memory.mdc` to `~/.cursor/rules/laml-memory.mdc`.
 
-| Server | Purpose | Tools |
-|--------|---------|-------|
-| **LAML** | Memory management | `store_memory`, `recall_memories`, `get_relevant_context`, etc. |
-| **Firebolt MCP** | SQL queries | `firebolt_query`, `firebolt_connect`, `firebolt_docs_search` |
-
-**Example workflow:**
-1. Agent uses FML to recall relevant memories about a project
-2. Agent uses Firebolt MCP to query actual data from your databases
-3. Agent uses FML to store new learnings from the analysis
-
-Both servers connect to the same Firebolt Core instance, so your memory data and query data live in the same database engine.
+Do not add a Firebolt MCP server, and do not point memory at `localhost:3473`.
 
 ---
 
@@ -521,8 +484,8 @@ local-agent-memory-layer/
 │   │       └── env.example      # Example environment config
 │   └── dashboard/               # React monitoring dashboard
 ├── cursor-rules/
-│   └── laml-memory.mdc          # Global Cursor rules for LAML
-├── firebolt-core-local/         # Firebolt Core management (if present)
+│   └── laml-memory.mdc          # Cursor rule: Relate graph memory
+├── AGENTS.md                    # Relate connection notes for agents
 └── README.md                    # This file
 ```
 

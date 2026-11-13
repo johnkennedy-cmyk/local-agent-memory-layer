@@ -9,7 +9,7 @@ LAML gives you persistent working + long-term memory with semantic search, and *
 - A **Headroom MCP server** entry compresses other MCP tool results (Firebolt, Cloudflare, etc.).
 - **`laml token-tools`** CLI installs, configures, and weekly-updates both stacks.
 
-Backends: **Firebolt** (default local), **Turbopuffer** (recommended cloud), **Elasticsearch**, or **ClickHouse** — one backend for sessions, working memory, and long-term vectors.
+Local agent memory is Relate at `~/.relate/memory` (Cypher). This server's optional vector backends are **Turbopuffer** (cloud), **Elasticsearch**, **ClickHouse**, or Firebolt cloud. Do not use local Firebolt Core as the semantic layer.
 
 ## Turbopuffer Cloud Option (Primary)
 
