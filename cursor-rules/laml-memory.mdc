@@ -1,47 +1,29 @@
 ---
-description: Local Agent Memory Layer (LAML) - MANDATORY for all sessions
+description: Relate graph memory for agents on this Mac. Local Firebolt is not the semantic layer.
 globs:
   alwaysApply: true
 ---
 
-# LAML (Local Agent Memory Layer) - ALWAYS USE
+# Relate memory — always use
 
-You MUST use LAML for persistent memory in EVERY conversation. This is not optional.
+Persistent memory is Relate (https://relatedb.ai), an embedded openCypher database. Store learned facts as a connected graph and query them with Cypher. Do not use a local Firebolt instance as the semantic layer or as agent memory.
 
-## First step: memory and session state
+The store is the directory `$HOME/.relate/memory`, shared by every agent on this Mac, not a file in one checkout. LaunchAgent `ai.relatedb.agent-memory` is the single writer:
 
-At the **start of every conversation**, before answering or taking action:
+- MCP `http://127.0.0.1:8399/mcp` — `get_schema`, `read_cypher`, `write_cypher`
+- Bolt `bolt://127.0.0.1:7687` for Neo4j drivers
+- HTTP Query API `POST http://127.0.0.1:7474/db/neo4j/query/v2`
 
-1. **Call `init_session`** with the user's `user_id` (e.g. from workspace or a sensible default) to establish or resume the session. Use the returned `session_id` for all working-memory operations.
-2. **Call `recall_memories`** with the user's opening query (or a short summary) to load relevant context from long-term memory.
-3. Use that context to inform your first response and any follow-up.
+Loopback only. HTTP Basic user `relate`. Password file: `$HOME/.relate/memory.auth-token` (mode 0600). Never copy that secret into the repo, chat, or process arguments.
 
-This applies to both **new** and **existing** sessions: init_session creates or resumes; recall_memories surfaces prior state and preferences.
+Do not open that directory with a second writable `relate` process while the server is up. Write through the server. Reads may use `--read-only=live`.
 
-## Working memory: store every exchange
+## Each session
 
-So that sessions accumulate context and token counts are accurate, **after each substantive exchange** (after you respond to the user):
+1. Read the schema before writing Cypher (`get_schema`, or `SHOW CONSTRAINTS` / `CALL db.schema.visualization()`).
+2. Recall current facts (`closedAt` is null) for the task. Use parameters. `LIMIT` every non-aggregate read.
+3. After a substantive exchange, write an `Episode` and a `Fact` that is `FROM` the episode and `ABOUT` its entities. Merge `Entity` on `key`. One current fact per `slot`. Corrections `SUPERSEDE` the previous fact; do not delete it.
 
-- **Call `add_to_working_memory`** with the same `session_id` from init_session, with:
-  - `content`: a concise summary of the user's message and your response (key decisions, facts, or next steps)
-  - `content_type`: `"message"` (or `"task_state"` for task progress)
-- This populates working memory for the session and ensures `get_relevant_context` and the dashboard show correct token/item counts.
+Install, if `relate` is missing: `curl -sSfL https://relatedb.ai/install.sh | bash`. Then `relate skill install` and `relate agent-context`.
 
-At natural conversation boundaries or when the session is long, call **`checkpoint_working_memory`** (with `session_id` and `user_id`) to promote important items to long-term memory.
-
-## Optional: long-term storage
-
-- Call **`store_memory`** when the user makes decisions, shares preferences, or asks you to remember something.
-- Use **`get_relevant_context`** when you need combined working + long-term context for a complex query.
-
-LAML uses the `laml` MCP server and is database-agnostic (e.g. Firebolt Core or Elasticsearch).
-
-## Token efficiency (embedded — RTK + Headroom)
-
-LAML natively compresses its own MCP responses via **Headroom**. For all LLM work:
-
-1. At session start, optionally call **`get_token_optimization_status`** to confirm RTK/Headroom are active.
-2. Prefer **`rtk`-prefixed shell commands** when running git, tests, lint, docker (`rtk git status`, `rtk cargo test`) — Cursor hook rewrites Shell tools when RTK is installed.
-3. LAML memory JSON is already compressed; use **`headroom_retrieve`** (Headroom MCP) only if you need full uncompressed tool payloads.
-
-Setup from terminal: `laml token-tools setup` (or MCP: `setup_token_optimization`).
+Headroom and RTK still handle token compression. They are not the memory store.

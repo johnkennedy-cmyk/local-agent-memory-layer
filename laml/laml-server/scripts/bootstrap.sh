@@ -38,11 +38,16 @@ if [ $MISSING -eq 1 ]; then
 fi
 
 echo ""
-echo "Checking Firebolt Core..."
-if curl -s "http://localhost:3473/?output_format=PSQL" -d "SELECT 1" > /dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Firebolt Core on port 3473"
+echo "Checking Relate (local memory)..."
+if command -v relate >/dev/null 2>&1 || [ -x "$HOME/.local/bin/relate" ]; then
+    echo -e "  ${GREEN}✓${NC} relate CLI"
 else
-    echo -e "  ${YELLOW}!${NC} Firebolt Core not detected (optional for elastic/clickhouse backends)"
+    echo -e "  ${YELLOW}!${NC} relate not on PATH. Install: curl -sSfL https://relatedb.ai/install.sh | bash"
+fi
+if [ -d "$HOME/.relate/memory" ]; then
+    echo -e "  ${GREEN}✓${NC} store ~/.relate/memory"
+else
+    echo -e "  ${YELLOW}!${NC} ~/.relate/memory is missing. A writable relate query creates it; read-only open will not."
 fi
 
 echo ""
@@ -98,8 +103,8 @@ echo -e "${GREEN}LAML bootstrap complete${NC}"
 echo "=============="
 echo ""
 echo "Next steps:"
-echo "  1. Restart Cursor (Cmd+Q, reopen)"
-echo "  2. Enable laml + headroom MCP servers in Settings → Tools & MCP"
-echo "  3. Check token tools: laml token-tools status"
-echo "  4. Docs: laml-server/docs/TOKEN_EFFICIENCY.md"
+echo "  1. Local memory is the Relate store at ~/.relate/memory (see AGENTS.md)"
+echo "  2. Restart Cursor (Cmd+Q, reopen)"
+echo "  3. Enable the relate MCP server (http://127.0.0.1:8399/mcp) plus headroom"
+echo "  4. Check token tools: laml token-tools status"
 echo ""

@@ -45,5 +45,3 @@ def load_config() -> TokenEfficiencyConfig:
 
 def laml_server_root() -> Path:
     return Path(__file__).resolve().parents[2]
-
-

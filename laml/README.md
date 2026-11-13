@@ -2,7 +2,7 @@
 
 LAML is the product folder inside [local-agent-memory-layer](../README.md). It provides:
 
-1. **Persistent agent memory** — working memory, long-term semantic recall, auto-classification, checkpoints.
+1. **Token efficiency for the memory layer.** Persistent facts for agents on this Mac live in Relate (`~/.relate/memory`), queried with Cypher. See [AGENTS.md](../AGENTS.md).
 2. **Built-in token efficiency** — [Headroom](https://github.com/chopratejas/headroom) + [RTK](https://github.com/rtk-ai/rtk) embedded so memory and shell/MCP traffic use far fewer tokens.
 
 ## Layout
@@ -19,7 +19,7 @@ LAML is the product folder inside [local-agent-memory-layer](../README.md). It p
 ```bash
 cd laml-server
 ./scripts/bootstrap.sh
-# Restart Cursor; enable laml + headroom MCP servers
+# Restart Cursor; enable relate (memory) + headroom MCP servers
 source .venv/bin/activate
 laml token-tools status
 ```
